@@ -92,6 +92,53 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_groups: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          group_image: string | null
+          group_name: string
+          id: string
+          is_selected: boolean | null
+          participant_count: number | null
+          updated_at: string | null
+          user_id: string
+          whatsapp_connection_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          group_image?: string | null
+          group_name: string
+          id?: string
+          is_selected?: boolean | null
+          participant_count?: number | null
+          updated_at?: string | null
+          user_id: string
+          whatsapp_connection_id: string
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          group_image?: string | null
+          group_name?: string
+          id?: string
+          is_selected?: boolean | null
+          participant_count?: number | null
+          updated_at?: string | null
+          user_id?: string
+          whatsapp_connection_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_groups_whatsapp_connection_id_fkey"
+            columns: ["whatsapp_connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
