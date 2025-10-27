@@ -3,6 +3,9 @@ project_id = "wfzjcklrdevhblcuxaoq"
 [functions.generate-qr-code]
 verify_jwt = false
 
+[functions.scheduled-summaries]
+verify_jwt = false
+
 [functions.check-whatsapp-status]
 verify_jwt = false
 
