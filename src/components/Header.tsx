@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
+import { useStartFlow } from "@/hooks/useStartFlow";
 
 export const Header = () => {
+  const { startNow } = useStartFlow();
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -25,10 +27,10 @@ export const Header = () => {
         </nav>
         
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => window.location.href = '/auth'}>
+          <Button variant="ghost" size="sm" onClick={startNow}>
             Entrar
           </Button>
-          <Button variant="default" size="sm" onClick={() => window.location.href = '/auth'}>
+          <Button variant="default" size="sm" onClick={startNow}>
             Começar Grátis
           </Button>
         </div>
