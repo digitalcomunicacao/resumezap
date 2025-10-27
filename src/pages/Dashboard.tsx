@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Loader2, LogOut, CheckCircle2 } from "lucide-react";
+import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
@@ -10,6 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { WhatsAppConnectionModal } from "@/components/WhatsAppConnectionModal";
 import GroupsListModal from "@/components/GroupsListModal";
 import { SummariesList } from "@/components/SummariesList";
+import { useSubscription, STRIPE_PLANS } from "@/contexts/SubscriptionContext";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -19,6 +22,8 @@ const Dashboard = () => {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
+  const [generatingSummaries, setGeneratingSummaries] = useState(false);
+  const { subscriptionPlan, subscriptionEnd, groupsLimit, openCustomerPortal } = useSubscription();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -80,6 +85,27 @@ const Dashboard = () => {
 
   const handleWhatsAppConnect = () => {
     setShowConnectionModal(true);
+  };
+
+  const handleGenerateSummaries = async () => {
+    if (!whatsappConnection || profile?.selected_groups_count === 0) {
+      toast.error("Configure seus grupos primeiro");
+      return;
+    }
+
+    setGeneratingSummaries(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trigger-summaries');
+      
+      if (error) throw error;
+
+      toast.success(data.message || "Resumos sendo gerados!");
+    } catch (error: any) {
+      console.error('Error generating summaries:', error);
+      toast.error(error.message || "Erro ao gerar resumos");
+    } finally {
+      setGeneratingSummaries(false);
+    }
   };
 
   const handleConnectionSuccess = async () => {
@@ -238,23 +264,75 @@ const Dashboard = () => {
               </CardContent>
             </Card>
 
-            <Card className="shadow-soft">
+            <Card className="shadow-soft border-primary/20">
               <CardHeader>
-                <CardTitle>Plano Atual</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  {subscriptionPlan !== 'free' ? (
+                    <>
+                      <Crown className="w-5 h-5 text-primary" />
+                      Plano {STRIPE_PLANS[subscriptionPlan].name}
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-5 h-5 text-muted-foreground" />
+                      Plano Free
+                    </>
+                  )}
+                </CardTitle>
                 <CardDescription>
-                  Plano: {profile?.subscription_plan || "Free"}
+                  {subscriptionPlan !== 'free' ? (
+                    <>
+                      {groupsLimit} grupos • 
+                      {subscriptionEnd && ` Renova em ${format(new Date(subscriptionEnd), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`}
+                    </>
+                  ) : (
+                    `${groupsLimit} grupo disponível`
+                  )}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button className="w-full" variant="outline" disabled>
-                  Gerenciar Plano
-                </Button>
+              <CardContent className="space-y-2">
+                {subscriptionPlan !== 'free' ? (
+                  <Button 
+                    className="w-full" 
+                    variant="outline"
+                    onClick={openCustomerPortal}
+                  >
+                    Gerenciar Assinatura
+                  </Button>
+                ) : (
+                  <Button 
+                    className="w-full" 
+                    onClick={() => navigate('/#pricing')}
+                  >
+                    Fazer Upgrade
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
 
           <div className="mt-8">
-            <h2 className="text-2xl font-bold mb-4">Meus Resumos</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Meus Resumos</h2>
+              <Button 
+                onClick={handleGenerateSummaries}
+                disabled={generatingSummaries || !whatsappConnection || profile?.selected_groups_count === 0}
+                size="sm"
+                className="gap-2"
+              >
+                {generatingSummaries ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Gerar Resumos Agora
+                  </>
+                )}
+              </Button>
+            </div>
             <SummariesList userId={user?.id} />
           </div>
         </div>
@@ -269,7 +347,7 @@ const Dashboard = () => {
       <GroupsListModal
         open={showGroupsModal}
         onOpenChange={setShowGroupsModal}
-        userPlan={profile?.subscription_plan || 'free'}
+        userPlan={subscriptionPlan}
         onGroupsUpdated={async () => {
           const { data: profileData } = await supabase
             .from("profiles")

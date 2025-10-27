@@ -1,9 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Check } from "lucide-react";
+import { Check, Crown } from "lucide-react";
+import { useSubscription, STRIPE_PLANS, type SubscriptionPlan } from "@/contexts/SubscriptionContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 const plans = [
   {
+    key: 'free' as SubscriptionPlan,
     name: "Free",
     price: "R$ 0",
     description: "Ideal para testar o serviço",
@@ -13,11 +17,12 @@ const plans = [
       "IA básica",
       "Suporte por email",
     ],
-    cta: "Começar Grátis",
+    cta: "Plano Atual",
     popular: false,
   },
   {
-    name: "Starter",
+    key: 'basic' as SubscriptionPlan,
+    name: "Básico",
     price: "R$ 29",
     description: "Perfeito para uso pessoal",
     features: [
@@ -31,6 +36,7 @@ const plans = [
     popular: true,
   },
   {
+    key: 'pro' as SubscriptionPlan,
     name: "Pro",
     price: "R$ 49",
     description: "Para profissionais exigentes",
@@ -46,7 +52,8 @@ const plans = [
     popular: false,
   },
   {
-    name: "Business",
+    key: 'premium' as SubscriptionPlan,
+    name: "Premium",
     price: "R$ 97",
     description: "Para equipes e empresas",
     features: [
@@ -58,12 +65,39 @@ const plans = [
       "Relatórios personalizados",
       "SLA garantido",
     ],
-    cta: "Falar com Vendas",
+    cta: "Assinar Premium",
     popular: false,
   },
 ];
 
 export const Pricing = () => {
+  const { subscriptionPlan, createCheckout, loading } = useSubscription();
+  const navigate = useNavigate();
+
+  const handlePlanClick = async (planKey: SubscriptionPlan) => {
+    // Check if user is logged in
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      navigate('/auth');
+      return;
+    }
+
+    if (planKey === 'free') {
+      navigate('/dashboard');
+      return;
+    }
+
+    if (planKey === subscriptionPlan) {
+      navigate('/dashboard');
+      return;
+    }
+
+    await createCheckout(planKey);
+  };
+
+  const isCurrentPlan = (planKey: SubscriptionPlan) => planKey === subscriptionPlan;
+
   return (
     <section className="py-24 bg-gradient-hero">
       <div className="container mx-auto px-4">
@@ -77,51 +111,69 @@ export const Pricing = () => {
         </div>
         
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-          {plans.map((plan, index) => (
-            <Card 
-              key={index}
-              className={`relative ${plan.popular ? 'border-primary shadow-hover scale-105' : 'border-primary/10'}`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground text-sm font-semibold rounded-full">
-                  Mais Popular
-                </div>
-              )}
-              
-              <CardHeader className="space-y-2 pb-8">
-                <h3 className="text-2xl font-bold text-foreground">{plan.name}</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-primary">{plan.price}</span>
-                  {plan.price !== "R$ 0" && (
-                    <span className="text-muted-foreground">/mês</span>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">{plan.description}</p>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <ul className="space-y-3">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span className="text-sm text-foreground">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              
-              <CardFooter>
-                <Button 
-                  variant={plan.popular ? "hero" : "outline"} 
-                  className="w-full"
-                  size="lg"
-                  onClick={() => window.location.href = '/auth'}
-                >
-                  {plan.cta}
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+          {plans.map((plan, index) => {
+            const isCurrent = isCurrentPlan(plan.key);
+            
+            return (
+              <Card 
+                key={index}
+                className={`relative ${
+                  isCurrent 
+                    ? 'border-primary shadow-xl scale-105 bg-primary/5' 
+                    : plan.popular 
+                    ? 'border-primary shadow-hover scale-105' 
+                    : 'border-primary/10'
+                }`}
+              >
+                {isCurrent && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground text-sm font-semibold rounded-full flex items-center gap-1">
+                    <Crown className="w-4 h-4" />
+                    Seu Plano
+                  </div>
+                )}
+                
+                {!isCurrent && plan.popular && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground text-sm font-semibold rounded-full">
+                    Mais Popular
+                  </div>
+                )}
+                
+                <CardHeader className="space-y-2 pb-8">
+                  <h3 className="text-2xl font-bold text-foreground">{plan.name}</h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-primary">{plan.price}</span>
+                    {plan.price !== "R$ 0" && (
+                      <span className="text-muted-foreground">/mês</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{plan.description}</p>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  <ul className="space-y-3">
+                    {plan.features.map((feature, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                        <span className="text-sm text-foreground">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                
+                <CardFooter>
+                  <Button 
+                    variant={isCurrent ? "default" : plan.popular ? "hero" : "outline"} 
+                    className="w-full"
+                    size="lg"
+                    onClick={() => handlePlanClick(plan.key)}
+                    disabled={loading || isCurrent}
+                  >
+                    {isCurrent ? "Plano Atual" : plan.cta}
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </section>

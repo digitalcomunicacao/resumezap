@@ -11,3 +11,15 @@ verify_jwt = true
 
 [functions.fetch-groups]
 verify_jwt = true
+
+[functions.check-subscription]
+verify_jwt = true
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[functions.trigger-summaries]
+verify_jwt = true

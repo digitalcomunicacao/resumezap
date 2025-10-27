@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Users, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
+import { UpgradeModal } from "./UpgradeModal";
 
 interface Group {
   id: string;
@@ -41,6 +42,7 @@ export default function GroupsListModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const { toast } = useToast();
 
   const planLimit = PLAN_LIMITS[userPlan] || 1;
@@ -110,11 +112,7 @@ export default function GroupsListModal({
   const toggleGroupSelection = async (groupId: string, currentlySelected: boolean) => {
     // If trying to select and limit is reached, prevent
     if (!currentlySelected && limitReached) {
-      toast({
-        title: "Limite atingido",
-        description: `Seu plano permite selecionar até ${planLimit} grupo(s). Faça upgrade para selecionar mais.`,
-        variant: "destructive",
-      });
+      setShowUpgradeModal(true);
       return;
     }
 
@@ -335,6 +333,12 @@ export default function GroupsListModal({
           </div>
         </div>
       </DialogContent>
+      
+      <UpgradeModal 
+        open={showUpgradeModal}
+        onOpenChange={setShowUpgradeModal}
+        currentLimit={planLimit}
+      />
     </Dialog>
   );
 }
