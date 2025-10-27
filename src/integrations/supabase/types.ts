@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          selected_groups_count: number | null
+          subscription_plan: string | null
+          updated_at: string | null
+          whatsapp_connected: boolean | null
+          whatsapp_instance_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          selected_groups_count?: number | null
+          subscription_plan?: string | null
+          updated_at?: string | null
+          whatsapp_connected?: boolean | null
+          whatsapp_instance_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          selected_groups_count?: number | null
+          subscription_plan?: string | null
+          updated_at?: string | null
+          whatsapp_connected?: boolean | null
+          whatsapp_instance_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

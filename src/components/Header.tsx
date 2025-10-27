@@ -25,10 +25,10 @@ export const Header = () => {
         </nav>
         
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={() => window.location.href = '/auth'}>
             Entrar
           </Button>
-          <Button variant="default" size="sm">
+          <Button variant="default" size="sm" onClick={() => window.location.href = '/auth'}>
             Começar Grátis
           </Button>
         </div>

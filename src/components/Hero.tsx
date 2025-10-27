@@ -26,11 +26,11 @@ export const Hero = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button variant="hero" size="lg" className="group">
+              <Button variant="hero" size="lg" className="group" onClick={() => window.location.href = '/auth'}>
                 <MessageSquare className="w-5 h-5 transition-transform group-hover:scale-110" />
                 Começar Gratuitamente
               </Button>
-              <Button variant="outline" size="lg">
+              <Button variant="outline" size="lg" onClick={() => window.location.href = '#features'}>
                 Ver Como Funciona
               </Button>
             </div>

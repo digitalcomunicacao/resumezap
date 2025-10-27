@@ -115,6 +115,7 @@ export const Pricing = () => {
                   variant={plan.popular ? "hero" : "outline"} 
                   className="w-full"
                   size="lg"
+                  onClick={() => window.location.href = '/auth'}
                 >
                   {plan.cta}
                 </Button>
