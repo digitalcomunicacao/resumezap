@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Checkout from "./pages/Checkout";
 import Success from "./pages/Success";
+import Qualify from "./pages/Qualify";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const AppContent = () => {
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/qualify" element={<Qualify />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/settings" element={<Settings />} />

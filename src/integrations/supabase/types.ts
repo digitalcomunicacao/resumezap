@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action_type: string
+          admin_id: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          target_user_id: string
+        }
+        Insert: {
+          action_type: string
+          admin_id: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          target_user_id: string
+        }
+        Update: {
+          action_type?: string
+          admin_id?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       analytics_events: {
         Row: {
           created_at: string | null
@@ -38,6 +65,51 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_qualification: {
+        Row: {
+          city: string
+          company_employees: string | null
+          company_revenue: string | null
+          created_at: string | null
+          id: string
+          lead_score: number | null
+          notes: string | null
+          profession: string
+          qualified_at: string | null
+          updated_at: string | null
+          user_id: string
+          whatsapp: string
+        }
+        Insert: {
+          city: string
+          company_employees?: string | null
+          company_revenue?: string | null
+          created_at?: string | null
+          id?: string
+          lead_score?: number | null
+          notes?: string | null
+          profession: string
+          qualified_at?: string | null
+          updated_at?: string | null
+          user_id: string
+          whatsapp: string
+        }
+        Update: {
+          city?: string
+          company_employees?: string | null
+          company_revenue?: string | null
+          created_at?: string | null
+          id?: string
+          lead_score?: number | null
+          notes?: string | null
+          profession?: string
+          qualified_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+          whatsapp?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -45,6 +117,7 @@ export type Database = {
           full_name: string | null
           id: string
           last_seen_at: string | null
+          manual_groups_limit: number | null
           preferred_summary_time: string | null
           selected_groups_count: number | null
           send_summary_to_group: boolean | null
@@ -67,6 +140,7 @@ export type Database = {
           full_name?: string | null
           id: string
           last_seen_at?: string | null
+          manual_groups_limit?: number | null
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
           send_summary_to_group?: boolean | null
@@ -89,6 +163,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_seen_at?: string | null
+          manual_groups_limit?: number | null
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
           send_summary_to_group?: boolean | null

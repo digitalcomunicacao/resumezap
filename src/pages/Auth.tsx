@@ -82,7 +82,7 @@ const Auth = () => {
       }
       
       toast.success("Conta criada com sucesso!");
-      navigate("/dashboard");
+      navigate("/qualify");
     } catch (error: any) {
       toast.error("Erro ao criar conta");
     } finally {

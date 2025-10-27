@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MessageSquare, Loader2, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +11,8 @@ import { OverviewMetrics } from "@/components/analytics/OverviewMetrics";
 import { UsersAnalytics } from "@/components/analytics/UsersAnalytics";
 import { SummariesAnalytics } from "@/components/analytics/SummariesAnalytics";
 import { GroupsAnalytics } from "@/components/analytics/GroupsAnalytics";
+import { LeadsManagement } from "@/components/analytics/LeadsManagement";
+import { AdminLogsTable } from "@/components/analytics/AdminLogsTable";
 
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
@@ -108,39 +111,77 @@ const Admin = () => {
             </p>
           </div>
 
-          <OverviewMetrics />
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+              <TabsTrigger value="leads">Gestão de Leads</TabsTrigger>
+              <TabsTrigger value="logs">Logs de Ações</TabsTrigger>
+            </TabsList>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Resumos</CardTitle>
-                <CardDescription>Estatísticas de geração de resumos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SummariesAnalytics />
-              </CardContent>
-            </Card>
+            <TabsContent value="overview" className="space-y-6 mt-6">
+              <OverviewMetrics />
 
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Grupos</CardTitle>
-                <CardDescription>Grupos mais ativos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <GroupsAnalytics />
-              </CardContent>
-            </Card>
-          </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="shadow-soft">
+                  <CardHeader>
+                    <CardTitle>Resumos</CardTitle>
+                    <CardDescription>Estatísticas de geração de resumos</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SummariesAnalytics />
+                  </CardContent>
+                </Card>
 
-          <Card className="shadow-soft">
-            <CardHeader>
-              <CardTitle>Usuários</CardTitle>
-              <CardDescription>Análise de usuários da plataforma</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <UsersAnalytics />
-            </CardContent>
-          </Card>
+                <Card className="shadow-soft">
+                  <CardHeader>
+                    <CardTitle>Grupos</CardTitle>
+                    <CardDescription>Grupos mais ativos</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <GroupsAnalytics />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Usuários</CardTitle>
+                  <CardDescription>Análise de usuários da plataforma</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <UsersAnalytics />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="leads" className="mt-6">
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Gestão de Leads</CardTitle>
+                  <CardDescription>
+                    Visualize e gerencie todos os leads qualificados
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <LeadsManagement />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="logs" className="mt-6">
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Logs de Ações Admin</CardTitle>
+                  <CardDescription>
+                    Histórico de todas as ações realizadas por administradores
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AdminLogsTable />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

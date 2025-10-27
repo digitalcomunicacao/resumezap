@@ -122,7 +122,31 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const groupsLimit = STRIPE_PLANS[subscriptionPlan].groups_limit;
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("manual_groups_limit")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      setProfile(data);
+    };
+
+    fetchProfile();
+  }, [subscriptionPlan]);
+
+  const groupsLimit = React.useMemo(() => {
+    if (profile?.manual_groups_limit !== null && profile?.manual_groups_limit !== undefined) {
+      return profile.manual_groups_limit;
+    }
+    return STRIPE_PLANS[subscriptionPlan].groups_limit;
+  }, [profile, subscriptionPlan]);
 
   return (
     <SubscriptionContext.Provider

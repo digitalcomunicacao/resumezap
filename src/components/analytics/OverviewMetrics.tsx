@@ -10,19 +10,27 @@ export function OverviewMetrics() {
     summariesToday: 0,
     summariesWeek: 0,
     paidUsers: 0,
+    qualifiedLeads: 0,
+    avgLeadScore: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [usersRes, activeRes, todayRes, weekRes, paidRes] = await Promise.all([
+        const [usersRes, activeRes, todayRes, weekRes, paidRes, leadsRes, leadsData] = await Promise.all([
           supabase.from('profiles').select('id', { count: 'exact', head: true }),
           supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('whatsapp_connected', true),
           supabase.from('summaries').select('id', { count: 'exact', head: true }).gte('created_at', new Date().toISOString().split('T')[0]),
           supabase.from('summaries').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
           supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('subscription_plan', 'free'),
+          supabase.from('lead_qualification').select('id', { count: 'exact', head: true }).gte('lead_score', 30),
+          supabase.from('lead_qualification').select('lead_score'),
         ]);
+
+        const avgScore = leadsData.data && leadsData.data.length > 0
+          ? Math.round(leadsData.data.reduce((acc: number, l: any) => acc + (l.lead_score || 0), 0) / leadsData.data.length)
+          : 0;
 
         setMetrics({
           totalUsers: usersRes.count || 0,
@@ -30,6 +38,8 @@ export function OverviewMetrics() {
           summariesToday: todayRes.count || 0,
           summariesWeek: weekRes.count || 0,
           paidUsers: paidRes.count || 0,
+          qualifiedLeads: leadsRes.count || 0,
+          avgLeadScore: avgScore,
         });
       } catch (error) {
         console.error('Error fetching metrics:', error);
