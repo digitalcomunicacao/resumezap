@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { useQualificationCheck } from "@/hooks/useQualificationCheck";
 import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ const Dashboard = () => {
   const { user, loading } = useAuth();
   const { trackEvent } = useAnalytics();
   const navigate = useNavigate();
+  const { isQualified, loading: qualificationLoading } = useQualificationCheck();
   const [profile, setProfile] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -36,6 +38,16 @@ const Dashboard = () => {
       navigate("/auth");
     }
   }, [user, loading, navigate]);
+
+  // Redirecionar usuários FREE sem qualificação
+  useEffect(() => {
+    if (!loading && !qualificationLoading && user) {
+      if (subscriptionPlan === 'free' && !isQualified) {
+        toast.info("Complete seu cadastro para acessar a plataforma");
+        navigate("/qualify");
+      }
+    }
+  }, [subscriptionPlan, isQualified, loading, qualificationLoading, user, navigate]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -183,7 +195,7 @@ const Dashboard = () => {
     }
   };
 
-  if (loading || loadingProfile) {
+  if (loading || loadingProfile || qualificationLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

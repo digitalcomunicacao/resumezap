@@ -11,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MessageSquare, Loader2 } from "lucide-react";
 import { signIn, signUp } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const signInSchema = z.object({
@@ -29,6 +31,7 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { subscriptionPlan } = useSubscription();
 
   const signInForm = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
@@ -47,7 +50,7 @@ const Auth = () => {
   const handleSignIn = async (data: SignInFormData) => {
     setLoading(true);
     try {
-      const { error } = await signIn(data.email, data.password);
+      const { error, data: authData } = await signIn(data.email, data.password);
       
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
@@ -59,7 +62,32 @@ const Auth = () => {
       }
       
       toast.success("Login realizado com sucesso!");
-      navigate("/dashboard");
+      
+      // Verificar se usuário tem qualificação (FREE) ou é PAGO
+      if (authData?.user) {
+        const { data: qualification } = await supabase
+          .from("lead_qualification")
+          .select("id")
+          .eq("user_id", authData.user.id)
+          .single();
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("subscription_plan")
+          .eq("id", authData.user.id)
+          .single();
+
+        const isPaid = profile?.subscription_plan && profile.subscription_plan !== 'free';
+        
+        // Se for FREE e não tiver qualificação → /qualify
+        if (!isPaid && !qualification) {
+          navigate("/qualify");
+        } else {
+          navigate("/dashboard");
+        }
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       toast.error("Erro ao fazer login");
     } finally {

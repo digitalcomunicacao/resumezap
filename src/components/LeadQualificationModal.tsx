@@ -32,7 +32,7 @@ type QualificationData = z.infer<typeof qualificationSchema>;
 
 interface LeadQualificationModalProps {
   onComplete: () => void;
-  onSkip: () => void;
+  onSkip?: () => void;
 }
 
 export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualificationModalProps) => {
@@ -277,9 +277,10 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
                 >
                   {loading ? "Salvando..." : "Concluir"}
                 </Button>
-              )}
-            </div>
+            )}
+          </div>
 
+          {onSkip && (
             <Button
               type="button"
               variant="ghost"
@@ -288,9 +289,10 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
             >
               Pular por enquanto
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  </div>
+);
 };

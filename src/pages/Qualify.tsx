@@ -6,15 +6,11 @@ const Qualify = () => {
   const navigate = useNavigate();
 
   const handleComplete = () => {
+    toast.success("Cadastro completo! Bem-vindo ao Resume Zap!");
     navigate("/dashboard");
   };
 
-  const handleSkip = () => {
-    toast.info("Escolha um plano para começar!");
-    navigate("/#pricing");
-  };
-
-  return <LeadQualificationModal onComplete={handleComplete} onSkip={handleSkip} />;
+  return <LeadQualificationModal onComplete={handleComplete} />;
 };
 
 export default Qualify;
