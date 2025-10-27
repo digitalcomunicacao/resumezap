@@ -110,6 +110,82 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_summary_logs: {
+        Row: {
+          generated_at: string | null
+          id: string
+          subscription_plan: string | null
+          user_id: string
+        }
+        Insert: {
+          generated_at?: string | null
+          id?: string
+          subscription_plan?: string | null
+          user_id: string
+        }
+        Update: {
+          generated_at?: string | null
+          id?: string
+          subscription_plan?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_summary_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_analytics: {
+        Row: {
+          created_at: string | null
+          date: string
+          group_id: string
+          group_name: string
+          id: string
+          message_count: number
+          peak_hours: number[] | null
+          sentiment: string | null
+          top_topics: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          group_id: string
+          group_name: string
+          id?: string
+          message_count: number
+          peak_hours?: number[] | null
+          sentiment?: string | null
+          top_topics?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          group_id?: string
+          group_name?: string
+          id?: string
+          message_count?: number
+          peak_hours?: number[] | null
+          sentiment?: string | null
+          top_topics?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_analytics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -294,6 +370,50 @@ export type Database = {
             columns: ["summary_id"]
             isOneToOne: false
             referencedRelation: "summaries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      summary_preferences: {
+        Row: {
+          created_at: string | null
+          enable_smart_alerts: boolean | null
+          id: string
+          include_sentiment_analysis: boolean | null
+          size: string | null
+          thematic_focus: string | null
+          tone: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          enable_smart_alerts?: boolean | null
+          id?: string
+          include_sentiment_analysis?: boolean | null
+          size?: string | null
+          thematic_focus?: string | null
+          tone?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          enable_smart_alerts?: boolean | null
+          id?: string
+          include_sentiment_analysis?: boolean | null
+          size?: string | null
+          thematic_focus?: string | null
+          tone?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "summary_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
