@@ -300,39 +300,25 @@ const Dashboard = () => {
                     Gerenciar Assinatura
                   </Button>
                 ) : (
-                  <Button 
-                    className="w-full" 
-                    onClick={() => navigate('/#pricing')}
-                  >
-                    Fazer Upgrade
-                  </Button>
+          <Button 
+            className="w-full" 
+            onClick={() => {
+              navigate('/');
+              setTimeout(() => {
+                const element = document.getElementById('pricing');
+                element?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }}
+          >
+            Fazer Upgrade
+          </Button>
                 )}
               </CardContent>
             </Card>
           </div>
 
           <div className="mt-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Meus Resumos</h2>
-              <Button 
-                onClick={handleGenerateSummaries}
-                disabled={generatingSummaries || !whatsappConnection || profile?.selected_groups_count === 0}
-                size="sm"
-                className="gap-2"
-              >
-                {generatingSummaries ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Gerando...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Gerar Resumos Agora
-                  </>
-                )}
-              </Button>
-            </div>
+            <h2 className="text-2xl font-bold mb-4">Meus Resumos</h2>
             <SummariesList userId={user?.id} />
           </div>
         </div>

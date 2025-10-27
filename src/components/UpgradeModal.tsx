@@ -13,7 +13,11 @@ export const UpgradeModal = ({ open, onOpenChange, currentLimit }: UpgradeModalP
 
   const handleUpgrade = () => {
     onOpenChange(false);
-    navigate('/#pricing');
+    navigate('/');
+    setTimeout(() => {
+      const element = document.getElementById('pricing');
+      element?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   return (
