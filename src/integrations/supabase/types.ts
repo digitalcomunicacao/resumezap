@@ -50,6 +50,42 @@ export type Database = {
         }
         Relationships: []
       }
+      summaries: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          group_name: string
+          id: string
+          message_count: number | null
+          summary_date: string
+          summary_text: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          group_name: string
+          id?: string
+          message_count?: number | null
+          summary_date?: string
+          summary_text: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          group_name?: string
+          id?: string
+          message_count?: number | null
+          summary_date?: string
+          summary_text?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_connections: {
         Row: {
           connected_at: string | null

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { WhatsAppConnectionModal } from "@/components/WhatsAppConnectionModal";
 import GroupsListModal from "@/components/GroupsListModal";
+import { SummariesList } from "@/components/SummariesList";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -250,20 +251,11 @@ const Dashboard = () => {
                 </Button>
               </CardContent>
             </Card>
+          </div>
 
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Resumos</CardTitle>
-                <CardDescription>
-                  Visualize seus resumos diários
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button className="w-full" disabled>
-                  Em Breve
-                </Button>
-              </CardContent>
-            </Card>
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold mb-4">Meus Resumos</h2>
+            <SummariesList userId={user?.id} />
           </div>
         </div>
       </main>
