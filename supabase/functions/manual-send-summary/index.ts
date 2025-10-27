@@ -17,13 +17,17 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization')!;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+    // Cliente para autenticação do usuário (usando anon key)
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
     });
+
+    // Cliente admin para queries (usando service role key)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Authenticate user
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
@@ -44,7 +48,7 @@ serve(async (req) => {
     logStep("Fetching summary", { summaryId });
 
     // Fetch summary data
-    const { data: summary, error: summaryError } = await supabase
+    const { data: summary, error: summaryError } = await supabaseAdmin
       .from('summaries')
       .select('*')
       .eq('id', summaryId)
@@ -59,7 +63,7 @@ serve(async (req) => {
     logStep("Summary fetched", { groupId: summary.group_id, groupName: summary.group_name });
 
     // Check if already sent
-    const { data: existingDelivery } = await supabase
+    const { data: existingDelivery } = await supabaseAdmin
       .from('summary_deliveries')
       .select('id, status')
       .eq('summary_id', summaryId)
@@ -82,7 +86,7 @@ serve(async (req) => {
     }
 
     // Fetch WhatsApp connection
-    const { data: connection, error: connectionError } = await supabase
+    const { data: connection, error: connectionError } = await supabaseAdmin
       .from('whatsapp_connections')
       .select('instance_name, status')
       .eq('user_id', user.id)
@@ -97,7 +101,7 @@ serve(async (req) => {
     logStep("WhatsApp connection found", { instanceName: connection.instance_name });
 
     // Call send-group-summary
-    const sendResponse = await supabase.functions.invoke('send-group-summary', {
+    const sendResponse = await supabaseAdmin.functions.invoke('send-group-summary', {
       body: {
         summaryId: summary.id,
         userId: user.id,
