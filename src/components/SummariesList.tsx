@@ -37,11 +37,12 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   const { subscriptionPlan } = useSubscription();
 
   // Rate limits por plano
-  const RATE_LIMITS = {
+  const RATE_LIMITS: Record<string, number> = {
     free: 1,
     basic: 5,
     pro: 999999,
     premium: 999999,
+    enterprise: 999999,
   };
 
   const fetchSummaries = async () => {
@@ -99,7 +100,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   };
 
   const handleGenerateSummaries = async () => {
-    const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
+    const limit = RATE_LIMITS[subscriptionPlan] ?? 1;
     
     if (dailyUsage >= limit) {
       toast.error(`Limite diário atingido (${limit} resumo${limit > 1 ? 's' : ''}/dia). Faça upgrade para gerar mais!`);
@@ -275,7 +276,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     );
   }
 
-  const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
+  const limit = RATE_LIMITS[subscriptionPlan] ?? 1;
   const canGenerate = dailyUsage < limit;
 
   return (
