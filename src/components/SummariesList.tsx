@@ -79,7 +79,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   useEffect(() => {
     fetchSummaries();
     fetchDailyUsage();
-  }, [userId]);
+  }, [userId, subscriptionPlan]);
 
   const fetchDailyUsage = async () => {
     if (!userId) return;
@@ -89,6 +89,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
       .from('manual_summary_logs')
       .select('id')
       .eq('user_id', userId)
+      .eq('subscription_plan', subscriptionPlan)
       .gte('generated_at', `${today}T00:00:00`)
       .lte('generated_at', `${today}T23:59:59`);
 
