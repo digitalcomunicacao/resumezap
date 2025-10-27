@@ -7,15 +7,27 @@ import heroIllustration from "@/assets/hero-illustration.png";
 export const Hero = () => {
   const navigate = useNavigate();
 
-  const handleStartClick = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      navigate('/auth');
-      return;
-    }
+  console.log('🎨 Hero component renderizado');
 
-    navigate('/dashboard');
+  const handleStartClick = async () => {
+    console.log('🔍 Botão Hero clicado - iniciando verificação');
+    
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      console.log('📊 Sessão:', session ? 'Existe' : 'Não existe', 'Erro:', error);
+      
+      if (!session) {
+        console.log('➡️ Redirecionando para /auth');
+        navigate('/auth');
+        return;
+      }
+
+      console.log('➡️ Redirecionando para /dashboard');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('❌ Erro ao processar clique no Hero:', error);
+    }
   };
 
   return (
@@ -41,7 +53,12 @@ export const Hero = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button variant="hero" size="lg" className="group" onClick={handleStartClick}>
+              <Button 
+                variant="hero" 
+                size="lg" 
+                className="group cursor-pointer relative z-10" 
+                onClick={handleStartClick}
+              >
                 <MessageSquare className="w-5 h-5 transition-transform group-hover:scale-110" />
                 Começar Gratuitamente
               </Button>
