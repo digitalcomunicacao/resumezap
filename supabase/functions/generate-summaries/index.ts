@@ -99,11 +99,75 @@ serve(async (req) => {
 
     const summariesGenerated = [];
     const groupDetails = [];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
-    const timestampFromSeconds = Math.floor(yesterday.getTime() / 1000);
-    const timestampFromMs = yesterday.getTime();
+    
+    // Ajustar janela de busca para 48h atrás para cobrir variações de fuso
+    const searchWindowStart = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const timestampFromSeconds = Math.floor(searchWindowStart.getTime() / 1000);
+    const timestampFromMs = searchWindowStart.getTime();
+    
+    // Calcular "ontem" no fuso do usuário
+    const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const yesterdayLocalDateStr = yesterdayDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+    
+    console.log(`[TIMES] timezone=${userTimezone}, searchWindow=${searchWindowStart.toISOString()}, yesterdayLocal=${yesterdayLocalDateStr}`);
+
+    // Helper robusto para extrair timestamp em milissegundos
+    const getTimestampMs = (msg: any): number | null => {
+      const parseVal = (val: any): number | null => {
+        if (val == null) return null;
+        
+        if (typeof val === 'number') {
+          // 10 dígitos = seconds
+          if (val < 1e11) return val * 1000;
+          // 13 dígitos = ms
+          if (val < 1e14) return val;
+          // 16 dígitos = microseconds
+          if (val < 1e17) return Math.floor(val / 1e3);
+          // 19+ dígitos = nanoseconds
+          return Math.floor(val / 1e6);
+        }
+        
+        if (typeof val === 'string') {
+          // Remover não-dígitos e tentar normalizar
+          const digits = val.replace(/\D/g, '');
+          if (digits.length >= 10) {
+            const n = Number(digits);
+            if (digits.length === 10) return n * 1000;
+            if (digits.length === 13) return n;
+            if (digits.length === 16) return Math.floor(n / 1e3);
+            if (digits.length >= 19) return Math.floor(n / 1e6);
+          }
+          
+          // Tentar parse ISO
+          const iso = Date.parse(val);
+          if (!Number.isNaN(iso)) return iso;
+          
+          // Último recurso: converter string para número
+          const n = Number(val);
+          if (!Number.isNaN(n)) return parseVal(n);
+        }
+        
+        return null;
+      };
+
+      // Tentar extrair timestamp de múltiplas fontes possíveis
+      const candidates = [
+        msg?.messageTimestampMs,
+        msg?.messageTimestamp,
+        msg?.timestamp,
+        msg?.message?.messageTimestamp,
+        msg?.message?.extendedTextMessage?.contextInfo?.messageTimestamp,
+        msg?.message?.contextInfo?.messageTimestamp,
+        msg?.key?.messageTimestamp,
+      ];
+      
+      for (const c of candidates) {
+        const ms = parseVal(c);
+        if (ms) return ms;
+      }
+      
+      return null;
+    };
 
     // Helper function to extract messages from various API response formats
     const extractMessages = (data: any): any[] => {
@@ -289,27 +353,68 @@ serve(async (req) => {
 
         console.log(`Processing ${messages.length} messages (via ${fetchMethod}) for ${group.group_name}`);
 
-        // Format messages for AI - extract text from various message types
-        const formattedMessages = messages
+        // Processar mensagens: extrair timestamp, ordenar e filtrar por "ontem"
+        const processedMessages = messages
           .map((msg: any) => {
             const text = extractTextContent(msg);
             if (!text) return null;
             
+            const timestampMs = getTimestampMs(msg);
+            if (!timestampMs) {
+              console.log(`[TIMES] Skipping message with invalid timestamp in ${group.group_name}`);
+              return null;
+            }
+            
             const sender = extractSenderName(msg);
-            const rawTs: any = msg.messageTimestamp || msg.timestamp || msg.message?.messageTimestamp;
-            const tsNum = typeof rawTs === 'string' ? parseInt(rawTs) : Number(rawTs);
-            const isSeconds = tsNum && tsNum.toString().length === 10;
-            const date = new Date((isSeconds ? tsNum * 1000 : tsNum) || Date.now());
-            const formattedDate = date.toLocaleString('pt-BR', {
+            return { text, sender, timestampMs };
+          })
+          .filter(Boolean);
+
+        const fetchedCount = processedMessages.length;
+        console.log(`[TIMES] ${group.group_name}: fetched ${messages.length}, valid timestamps ${fetchedCount}`);
+
+        // Ordenar por timestamp (ascendente)
+        processedMessages.sort((a, b) => (a?.timestampMs || 0) - (b?.timestampMs || 0));
+
+        // Filtrar apenas mensagens de "ontem" no fuso do usuário
+        const yesterdayMessages = processedMessages.filter((msg) => {
+          if (!msg) return false;
+          const msgDate = new Date(msg.timestampMs);
+          const msgLocalDateStr = msgDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+          return msgLocalDateStr === yesterdayLocalDateStr;
+        });
+
+        console.log(`[TIMES] ${group.group_name}: filtered to ${yesterdayMessages.length} messages from yesterday (${yesterdayLocalDateStr})`);
+
+        // Log exemplos de timestamps (até 3)
+        yesterdayMessages.slice(0, 3).forEach((msg, idx) => {
+          if (!msg) return;
+          const formatted = new Date(msg.timestampMs).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+            timeZone: userTimezone
+          });
+          console.log(`[TIMES] Example ${idx + 1}: ${msg.timestampMs} -> ${formatted}`);
+        });
+
+        // Formatar mensagens para o AI
+        const formattedMessages = yesterdayMessages
+          .map((msg) => {
+            if (!msg) return null;
+            const formattedDate = new Date(msg.timestampMs).toLocaleString('pt-BR', {
               day: '2-digit',
               month: '2-digit',
               year: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
+              hourCycle: 'h23',
               timeZone: userTimezone
             });
-            
-            return `[${formattedDate}] ${sender}: ${text}`;
+            return `[${formattedDate}] ${msg.sender}: ${msg.text}`;
           })
           .filter(Boolean)
           .join('\n');
