@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon } from "lucide-react";
+import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,7 @@ import { SummarySettings } from "@/components/SummarySettings";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
+  const { trackEvent } = useAnalytics();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -26,6 +28,7 @@ const Dashboard = () => {
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
   const [generatingSummaries, setGeneratingSummaries] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { subscriptionPlan, subscriptionEnd, groupsLimit, openCustomerPortal } = useSubscription();
 
   useEffect(() => {
@@ -53,6 +56,19 @@ const Dashboard = () => {
     };
 
     fetchProfile();
+
+    const checkAdmin = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      setIsAdmin(!!data);
+    };
+
+    checkAdmin();
   }, [user]);
 
   useEffect(() => {
@@ -97,6 +113,7 @@ const Dashboard = () => {
     }
 
     setGeneratingSummaries(true);
+    trackEvent('manual_summary_generation');
     try {
       const { data, error } = await supabase.functions.invoke('trigger-summaries');
       
@@ -186,6 +203,16 @@ const Dashboard = () => {
           </div>
           
           <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/admin")}
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Admin
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
