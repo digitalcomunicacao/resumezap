@@ -1,10 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Zap } from "lucide-react";
-import { useStartFlow } from "@/hooks/useStartFlow";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import heroIllustration from "@/assets/hero-illustration.png";
 
 export const Hero = () => {
-  const { startNow } = useStartFlow();
+  const navigate = useNavigate();
+
+  const handleStartClick = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      navigate('/auth');
+      return;
+    }
+
+    navigate('/dashboard');
+  };
 
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-gradient-hero">
@@ -29,7 +41,7 @@ export const Hero = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button variant="hero" size="lg" className="group" onClick={startNow}>
+              <Button variant="hero" size="lg" className="group" onClick={handleStartClick}>
                 <MessageSquare className="w-5 h-5 transition-transform group-hover:scale-110" />
                 Começar Gratuitamente
               </Button>
@@ -58,16 +70,6 @@ export const Hero = () => {
               alt="Resume Zap - Resumos de WhatsApp" 
               className="relative z-10 w-full h-auto rounded-2xl shadow-hover"
             />
-            <Button 
-              variant="hero" 
-              size="lg" 
-              className="hidden md:flex absolute bottom-8 left-8 z-20 group shadow-lg"
-              onClick={startNow}
-              aria-label="Começar Gratuitamente"
-            >
-              <MessageSquare className="w-5 h-5 transition-transform group-hover:scale-110" />
-              Começar Gratuitamente
-            </Button>
           </div>
         </div>
       </div>
