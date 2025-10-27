@@ -18,6 +18,14 @@ const qualificationSchema = z.object({
   profession: z.enum(["empresario", "diretor_gestor", "marketing_operacoes", "outros"]),
   company_revenue: z.string().optional(),
   company_employees: z.string().optional(),
+}).refine((data) => {
+  if (data.profession === "empresario" || data.profession === "diretor_gestor") {
+    return data.company_revenue && data.company_employees;
+  }
+  return true;
+}, {
+  message: "Preencha todos os campos da empresa",
+  path: ["company_employees"],
 });
 
 type QualificationData = z.infer<typeof qualificationSchema>;
@@ -42,7 +50,14 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
   });
 
   const profession = watch("profession");
+  const company_revenue = watch("company_revenue");
+  const company_employees = watch("company_employees");
   const needsCompanyInfo = profession === "empresario" || profession === "diretor_gestor";
+
+  const isLastStepValid = () => {
+    if (!needsCompanyInfo) return true;
+    return company_revenue && company_employees;
+  };
 
   const calculateLeadScore = (data: QualificationData): number => {
     let score = 0;
@@ -71,6 +86,9 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
   };
 
   const onSubmit = async (data: QualificationData) => {
+    console.log("🔍 Dados do formulário:", data);
+    console.log("🔍 Precisa info da empresa:", needsCompanyInfo);
+    
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -80,7 +98,10 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
         return;
       }
 
+      console.log("🔍 Usuário:", user);
+
       const leadScore = calculateLeadScore(data);
+      console.log("🔍 Lead score calculado:", leadScore);
 
       const { error } = await supabase
         .from("lead_qualification")
@@ -99,7 +120,7 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
       toast.success("Dados salvos com sucesso!");
       onComplete();
     } catch (error: any) {
-      console.error("Error saving qualification:", error);
+      console.error("❌ Error saving qualification:", error);
       toast.error(error.message || "Erro ao salvar dados");
     } finally {
       setLoading(false);
@@ -249,7 +270,11 @@ export const LeadQualificationModal = ({ onComplete, onSkip }: LeadQualification
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               ) : (
-                <Button type="submit" className="flex-1" disabled={loading}>
+                <Button 
+                  type="submit" 
+                  className="flex-1" 
+                  disabled={loading || !isLastStepValid()}
+                >
                   {loading ? "Salvando..." : "Concluir"}
                 </Button>
               )}

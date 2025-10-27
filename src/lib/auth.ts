@@ -15,6 +15,21 @@ export const signUp = async (email: string, password: string, fullName: string) 
     },
   });
 
+  if (error) return { data, error };
+
+  // Garantir que o profile seja criado/atualizado com email e nome
+  if (data.user) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ 
+        full_name: fullName,
+        email: email 
+      })
+      .eq('id', data.user.id);
+
+    if (profileError) console.error('❌ Erro ao atualizar profile:', profileError);
+  }
+
   return { data, error };
 };
 

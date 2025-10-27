@@ -60,11 +60,16 @@ export const LeadsManagement = () => {
       // Merge data
       const mergedData = (leadsData || []).map((lead) => {
         const profile = profilesData?.find((p) => p.id === lead.user_id);
+        
+        if (!profile) {
+          console.warn(`⚠️ Profile não encontrado para user_id: ${lead.user_id}`);
+        }
+        
         return {
           ...lead,
           profiles: profile || {
-            full_name: "N/A",
-            email: "N/A",
+            full_name: "Nome não encontrado",
+            email: "Email não encontrado",
             subscription_plan: "free",
             selected_groups_count: 0,
             manual_groups_limit: null,
