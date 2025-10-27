@@ -57,27 +57,35 @@ serve(async (req) => {
       logStep("Creating new customer");
     }
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    // Get the price to calculate the amount
+    const price = await stripe.prices.retrieve(price_id);
+    const amount = typeof price.unit_amount === 'number' ? price.unit_amount : 0;
     
-    const session = await stripe.checkout.sessions.create({
+    logStep("Creating PaymentIntent", { amount, currency: price.currency });
+
+    // Create a PaymentIntent instead of a Checkout Session
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: price.currency || 'brl',
       customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: price_id,
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      ui_mode: "embedded",
-      return_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}${plan_key ? `&plan=${plan_key}` : ''}`,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: {
+        user_id: user.id,
+        plan_key: plan_key || '',
+        price_id,
+      },
     });
 
-    logStep("Checkout session created", { sessionId: session.id, clientSecret: session.client_secret });
+    logStep("PaymentIntent created", { 
+      paymentIntentId: paymentIntent.id, 
+      clientSecret: paymentIntent.client_secret 
+    });
 
     return new Response(JSON.stringify({ 
-      clientSecret: session.client_secret,
-      sessionId: session.id 
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id 
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

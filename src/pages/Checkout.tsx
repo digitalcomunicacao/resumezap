@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { STRIPE_PLANS, type SubscriptionPlan } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
+import { Elements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+import { StripePaymentForm } from "@/components/StripePaymentForm";
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 const plans = {
   basic: {
@@ -59,7 +64,6 @@ const Checkout = () => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stripeLoaded, setStripeLoaded] = useState(false);
 
   const plan = planKey ? plans[planKey as keyof typeof plans] : null;
 
@@ -99,7 +103,7 @@ const Checkout = () => {
 
         if (data?.clientSecret) {
           setClientSecret(data.clientSecret);
-          loadStripeCheckout(data.clientSecret);
+          setLoading(false);
         } else {
           throw new Error('Não foi possível obter o checkout');
         }
@@ -112,37 +116,6 @@ const Checkout = () => {
 
     checkAuth();
   }, [planKey, navigate, plan]);
-
-  const loadStripeCheckout = async (secret: string) => {
-    try {
-      if (!window.Stripe) {
-        throw new Error('Stripe.js não foi carregado');
-      }
-
-      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-      if (!publishableKey) {
-        throw new Error('Chave pública do Stripe não configurada. Configure VITE_STRIPE_PUBLISHABLE_KEY');
-      }
-
-      const stripe = window.Stripe(publishableKey);
-      
-      const checkout = await stripe.initEmbeddedCheckout({
-        clientSecret: secret,
-      });
-
-      const checkoutContainer = document.getElementById('checkout-container');
-      if (checkoutContainer) {
-        checkout.mount('#checkout-container');
-        setStripeLoaded(true);
-      }
-
-      setLoading(false);
-    } catch (err) {
-      console.error('Error loading Stripe checkout:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao carregar checkout');
-      setLoading(false);
-    }
-  };
 
   if (!plan) {
     return null;
@@ -238,11 +211,28 @@ const Checkout = () => {
                   </Alert>
                 )}
 
-                {/* Stripe Embedded Checkout Container */}
-                <div 
-                  id="checkout-container" 
-                  className={`min-h-[500px] ${!stripeLoaded ? 'hidden' : ''}`}
-                />
+                {/* Stripe Payment Element */}
+                {clientSecret && (
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          colorPrimary: 'hsl(142 70% 49%)',
+                          colorBackground: 'hsl(var(--background))',
+                          colorText: 'hsl(var(--foreground))',
+                          colorDanger: 'hsl(var(--destructive))',
+                          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                          borderRadius: '1rem',
+                        },
+                      },
+                    }}
+                  >
+                    <StripePaymentForm planKey={planKey} />
+                  </Elements>
+                )}
               </CardContent>
             </Card>
           </div>
