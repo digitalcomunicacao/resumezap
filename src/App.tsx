@@ -4,7 +4,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
+import { SubscriptionProvider, useSubscription } from "@/contexts/SubscriptionContext";
+import { CheckoutModal } from "@/components/CheckoutModal";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -13,9 +14,11 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <SubscriptionProvider>
+const AppContent = () => {
+  const { checkoutClientSecret, checkoutModalOpen, setCheckoutModalOpen } = useSubscription();
+
+  return (
+    <>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -30,6 +33,19 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      <CheckoutModal
+        open={checkoutModalOpen}
+        onOpenChange={setCheckoutModalOpen}
+        clientSecret={checkoutClientSecret}
+      />
+    </>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <SubscriptionProvider>
+      <AppContent />
     </SubscriptionProvider>
   </QueryClientProvider>
 );

@@ -45,6 +45,9 @@ interface SubscriptionContextType {
   checkSubscription: () => Promise<void>;
   createCheckout: (planKey: SubscriptionPlan) => Promise<void>;
   openCustomerPortal: () => Promise<void>;
+  checkoutClientSecret: string | null;
+  checkoutModalOpen: boolean;
+  setCheckoutModalOpen: (open: boolean) => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -54,6 +57,8 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const { toast } = useToast();
 
   const checkSubscription = async () => {
@@ -107,8 +112,9 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      if (data?.url) {
-        window.open(data.url, '_blank');
+      if (data?.clientSecret) {
+        setCheckoutClientSecret(data.clientSecret);
+        setCheckoutModalOpen(true);
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
@@ -169,6 +175,9 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         checkSubscription,
         createCheckout,
         openCustomerPortal,
+        checkoutClientSecret,
+        checkoutModalOpen,
+        setCheckoutModalOpen,
       }}
     >
       {children}
