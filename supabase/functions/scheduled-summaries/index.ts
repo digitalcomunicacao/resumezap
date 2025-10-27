@@ -164,6 +164,22 @@ serve(async (req) => {
             // Enviar cada resumo para seu respectivo grupo
             for (const summary of summaries || []) {
               try {
+                // Check if summary was already sent to this group
+                const { data: existingDelivery } = await supabase
+                  .from('summary_deliveries')
+                  .select('id')
+                  .eq('summary_id', summary.id)
+                  .eq('group_id', summary.group_id)
+                  .maybeSingle();
+
+                if (existingDelivery) {
+                  logStep("Summary already sent, skipping", { 
+                    groupId: summary.group_id,
+                    summaryId: summary.id 
+                  });
+                  continue;
+                }
+
                 const sendResponse = await fetch(
                   `${supabaseUrl}/functions/v1/send-group-summary`,
                   {
