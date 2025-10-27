@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EditGroupsLimitModal } from "./EditGroupsLimitModal";
-import { Search, Edit, Copy, Check } from "lucide-react";
+import { EditUserPlanModal } from "./EditUserPlanModal";
+import { Search, Edit, Copy, Check, CreditCard } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -16,6 +17,7 @@ interface User {
   full_name: string;
   email: string;
   subscription_plan: string;
+  subscription_end_date: string | null;
   manual_groups_limit: number | null;
   selected_groups_count: number;
   total_summaries_generated: number;
@@ -39,6 +41,7 @@ export const UsersManagement = () => {
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [whatsappFilter, setWhatsappFilter] = useState<string>("all");
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUserPlan, setEditingUserPlan] = useState<User | null>(null);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
@@ -235,7 +238,16 @@ export const UsersManagement = () => {
                       locale: ptBR,
                     })}
                   </TableCell>
-                  <TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingUserPlan(user)}
+                    >
+                      <CreditCard className="h-3 w-3 mr-1" />
+                      Editar Plano
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -244,7 +256,8 @@ export const UsersManagement = () => {
                       <Edit className="h-3 w-3 mr-1" />
                       Editar Limite
                     </Button>
-                  </TableCell>
+                  </div>
+                </TableCell>
                 </TableRow>
               );
             })}
@@ -264,6 +277,16 @@ export const UsersManagement = () => {
           user={editingUser}
           onClose={() => {
             setEditingUser(null);
+            fetchUsers();
+          }}
+        />
+      )}
+
+      {editingUserPlan && (
+        <EditUserPlanModal
+          user={editingUserPlan}
+          onClose={() => {
+            setEditingUserPlan(null);
             fetchUsers();
           }}
         />
