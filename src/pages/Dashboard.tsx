@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Sparkles } from "lucide-react";
+import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
@@ -186,6 +186,14 @@ const Dashboard = () => {
           </div>
           
           <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/settings")}
+            >
+              <SettingsIcon className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
             <span className="text-sm text-muted-foreground">
               Olá, {profile?.full_name || user?.email}
             </span>
