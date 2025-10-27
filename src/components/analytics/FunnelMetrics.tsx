@@ -44,7 +44,7 @@ export function FunnelMetrics() {
   const fetchFunnelData = async () => {
     try {
       const [visitorsRes, profilesRes, whatsappRes, subscribersRes] = await Promise.all([
-        supabase.from('analytics_events').select('id', { count: 'exact', head: true }),
+        supabase.from('analytics_events').select('id', { count: 'exact', head: true }).eq('event_type', 'page_view'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('whatsapp_connected', true),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).not('stripe_customer_id', 'is', null),
