@@ -79,6 +79,22 @@ serve(async (req) => {
 
     console.log(`Found ${groups.length} selected groups`);
 
+    // Get user's profile for subscription plan
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('subscription_plan')
+      .eq('id', userId)
+      .single();
+
+    const userPlan = profile?.subscription_plan || 'free';
+
+    // Get user's summary preferences
+    const { data: preferences } = await supabase
+      .from('summary_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     const summariesGenerated = [];
     const groupDetails = [];
     const yesterday = new Date();
@@ -233,6 +249,49 @@ serve(async (req) => {
 
         console.log(`Found ${textMessageCount} text messages from ${messages.length} total messages`);
 
+        // Determine AI model based on plan
+        const aiModel = (userPlan === 'pro' || userPlan === 'premium') 
+          ? 'google/gemini-2.5-pro' 
+          : 'google/gemini-2.5-flash';
+
+        // Build system prompt based on preferences
+        let systemPrompt = 'Você é um assistente especializado em criar resumos de conversas do WhatsApp.';
+        
+        const tone = preferences?.tone || 'professional';
+        const size = preferences?.size || 'medium';
+        const thematicFocus = preferences?.thematic_focus;
+        const includeSentiment = preferences?.include_sentiment_analysis || false;
+
+        // Tone customization
+        const toneInstructions = {
+          professional: 'Mantenha um tom profissional e objetivo.',
+          casual: 'Use um tom casual e descontraído.',
+          formal: 'Mantenha um tom formal e elegante.',
+          friendly: 'Use um tom amigável e acolhedor.',
+        };
+        systemPrompt += ` ${toneInstructions[tone as keyof typeof toneInstructions] || toneInstructions.professional}`;
+
+        // Size customization
+        const sizeInstructions = {
+          short: 'Crie um resumo bem curto, com no máximo 3 pontos principais.',
+          medium: 'Crie um resumo médio, com 4-6 pontos principais.',
+          long: 'Crie um resumo detalhado, com 7-10 pontos principais.',
+          detailed: 'Crie um resumo muito detalhado, cobrindo todos os aspectos importantes.',
+        };
+        systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
+
+        // Thematic focus
+        if (thematicFocus) {
+          systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
+        }
+
+        // Sentiment analysis
+        if (includeSentiment) {
+          systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
+        }
+
+        systemPrompt += ' Organize em bullet points em português brasileiro.';
+
         // Generate summary using Lovable AI
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
           method: 'POST',
@@ -241,11 +300,11 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
+            model: aiModel,
             messages: [
               {
                 role: 'system',
-                content: 'Você é um assistente especializado em criar resumos claros e objetivos de conversas do WhatsApp. Crie um resumo em português brasileiro com os principais tópicos discutidos, mantendo um tom amigável e organizado em bullet points.'
+                content: systemPrompt
               },
               {
                 role: 'user',

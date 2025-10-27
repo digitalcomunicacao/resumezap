@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PricingModal } from "@/components/PricingModal";
 import { SummarySettings } from "@/components/SummarySettings";
+import { SummaryCustomization } from "@/components/SummaryCustomization";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -365,6 +366,8 @@ const Dashboard = () => {
               currentTime={profile?.preferred_summary_time || "09:00:00"}
               sendToGroup={profile?.send_summary_to_group ?? true}
             />
+
+            <SummaryCustomization userId={user?.id || ''} />
           </div>
 
           <div className="mt-8">

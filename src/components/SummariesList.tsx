@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles, Download, AlertCircle } from "lucide-react";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO, isToday, isYesterday, isThisWeek, isThisMonth } from "date-fns";
@@ -29,6 +31,16 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   const [generating, setGenerating] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set());
+  const [dailyUsage, setDailyUsage] = useState(0);
+  const { subscriptionPlan } = useSubscription();
+
+  // Rate limits por plano
+  const RATE_LIMITS = {
+    free: 1,
+    basic: 5,
+    pro: 999999,
+    premium: 999999,
+  };
 
   const fetchSummaries = async () => {
     if (!userId) return;
@@ -54,9 +66,33 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
 
   useEffect(() => {
     fetchSummaries();
+    fetchDailyUsage();
   }, [userId]);
 
+  const fetchDailyUsage = async () => {
+    if (!userId) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('manual_summary_logs')
+      .select('id')
+      .eq('user_id', userId)
+      .gte('generated_at', `${today}T00:00:00`)
+      .lte('generated_at', `${today}T23:59:59`);
+
+    if (!error) {
+      setDailyUsage(data?.length || 0);
+    }
+  };
+
   const handleGenerateSummaries = async () => {
+    const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
+    
+    if (dailyUsage >= limit) {
+      toast.error(`Limite diário atingido (${limit} resumo${limit > 1 ? 's' : ''}/dia). Faça upgrade para gerar mais!`);
+      return;
+    }
+
     setGenerating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -65,6 +101,12 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
         toast.error("Você precisa estar logado");
         return;
       }
+
+      // Log manual generation
+      await supabase.from('manual_summary_logs').insert({
+        user_id: userId,
+        subscription_plan: subscriptionPlan,
+      });
 
       const { data, error } = await supabase.functions.invoke('generate-summaries', {
         headers: {
@@ -75,7 +117,6 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
       if (error) throw error;
 
       if (data.summaries_count === 0) {
-        // Check details for specific reasons
         const details = data.details || [];
         const noMessages = details.filter((d: any) => d.reason === 'no_messages').length;
         const noText = details.filter((d: any) => d.reason === 'no_text_messages').length;
@@ -95,6 +136,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
       }
 
       await fetchSummaries();
+      await fetchDailyUsage();
     } catch (error: any) {
       console.error("Error generating summaries:", error);
       toast.error("Erro ao gerar resumos: " + (error.message || "Tente novamente"));
@@ -155,6 +197,9 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     );
   }
 
+  const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
+  const canGenerate = dailyUsage < limit;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -173,23 +218,37 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
           </Select>
         </div>
 
-        <Button
-          onClick={handleGenerateSummaries}
-          disabled={generating}
-          className="gap-2"
-        >
-          {generating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Gerando resumos...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              Gerar Resumos Agora
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={handleGenerateSummaries}
+            disabled={generating || !canGenerate}
+            className="gap-2"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Gerando resumos...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Gerar Resumos Agora
+              </>
+            )}
+          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {!canGenerate ? (
+              <>
+                <AlertCircle className="w-3 h-3 text-destructive" />
+                <span className="text-destructive">Limite diário atingido ({dailyUsage}/{limit})</span>
+              </>
+            ) : (
+              <>
+                <span>Uso hoje: {dailyUsage}/{limit === 999999 ? '∞' : limit}</span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {Object.keys(groupedSummaries).length === 0 ? (
