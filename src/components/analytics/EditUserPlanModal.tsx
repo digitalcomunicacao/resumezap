@@ -49,6 +49,8 @@ export function EditUserPlanModal({ user, onClose }: EditUserPlanModalProps) {
       // Update user profile
       const updateData: any = {
         subscription_plan: newPlan,
+        subscription_status: newPlan !== 'free' ? 'active' : 'inactive',
+        manual_subscription: true,
       };
 
       if (newPlan !== "free" && endDate) {
@@ -56,9 +58,6 @@ export function EditUserPlanModal({ user, onClose }: EditUserPlanModalProps) {
       } else {
         updateData.subscription_end_date = null;
       }
-
-      // Mark as manual subscription
-      updateData.manual_subscription = true;
 
       const { error: updateError } = await supabase
         .from("profiles")

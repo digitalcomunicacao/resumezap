@@ -109,21 +109,30 @@ serve(async (req) => {
     if (customers.data.length === 0) {
       logStep("No customer found, returning unsubscribed state");
       
-      // Update profile to inactive
-      await supabaseClient
-        .from('profiles')
-        .update({ 
-          subscription_status: 'inactive',
-          stripe_product_id: null,
-          subscription_end_date: null
-        })
-        .eq('id', user.id);
+      // Only update if not a manual subscription
+      if (profile?.manual_subscription) {
+        logStep("Preserving manual subscription", { 
+          plan: profile.subscription_plan,
+          userId: user.id 
+        });
+      } else {
+        logStep("Updating to free plan (no manual override)");
+        await supabaseClient
+          .from('profiles')
+          .update({ 
+            subscription_status: 'inactive',
+            stripe_product_id: null,
+            subscription_plan: 'free',
+            subscription_end_date: null
+          })
+          .eq('id', user.id);
+      }
       
       return new Response(JSON.stringify({ 
         subscribed: false,
         product_id: null,
         subscription_end: null,
-        subscription_plan: 'free'
+        subscription_plan: profile?.manual_subscription ? profile.subscription_plan : 'free'
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -176,16 +185,24 @@ serve(async (req) => {
     } else {
       logStep("No active subscription found");
       
-      // Update profile to inactive
-      await supabaseClient
-        .from('profiles')
-        .update({ 
-          subscription_status: 'inactive',
-          stripe_product_id: null,
-          subscription_plan: 'free',
-          subscription_end_date: null
-        })
-        .eq('id', user.id);
+      // Only update if not a manual subscription
+      if (profile?.manual_subscription) {
+        logStep("Preserving manual subscription (no Stripe subscription)", { 
+          plan: profile.subscription_plan,
+          userId: user.id 
+        });
+      } else {
+        logStep("Updating to free plan (no active subscription, no manual override)");
+        await supabaseClient
+          .from('profiles')
+          .update({ 
+            subscription_status: 'inactive',
+            stripe_product_id: null,
+            subscription_plan: 'free',
+            subscription_end_date: null
+          })
+          .eq('id', user.id);
+      }
     }
 
     return new Response(JSON.stringify({
