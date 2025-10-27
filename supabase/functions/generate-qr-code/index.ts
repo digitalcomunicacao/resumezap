@@ -34,21 +34,28 @@ serve(async (req) => {
 
     console.log('Generating QR code for user:', user.id);
 
-    // Check if user already has an active connection
+    // Check if user already has an active or connecting connection
     const { data: existingConnection } = await supabase
       .from('whatsapp_connections')
       .select('*')
       .eq('user_id', user.id)
-      .eq('status', 'connected')
+      .in('status', ['connected', 'connecting'])
       .maybeSingle();
 
     if (existingConnection) {
-      console.log('User already has active connection:', existingConnection.instance_id);
+      console.log('User already has active/connecting connection:', existingConnection.instance_id);
       return new Response(
-        JSON.stringify({ error: 'Você já tem uma conexão WhatsApp ativa' }),
+        JSON.stringify({ error: 'Você já tem uma conexão WhatsApp ativa ou em andamento' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Mark any previous connections as disconnected before creating new one
+    await supabase
+      .from('whatsapp_connections')
+      .update({ status: 'disconnected' })
+      .eq('user_id', user.id)
+      .neq('status', 'disconnected');
 
     // Generate unique instance name
     const instanceName = `resumezap_${user.id.substring(0, 8)}_${Date.now()}`;
