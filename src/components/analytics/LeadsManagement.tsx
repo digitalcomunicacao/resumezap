@@ -46,43 +46,25 @@ export const LeadsManagement = () => {
 
   const fetchLeads = async () => {
     try {
-      const { data: leadsData, error } = await supabase
+      const { data, error } = await supabase
         .from("lead_qualification")
-        .select("*")
+        .select(`
+          *,
+          profiles!inner(
+            full_name,
+            email,
+            subscription_plan,
+            subscription_end_date,
+            manual_subscription,
+            selected_groups_count,
+            manual_groups_limit
+          )
+        `)
         .order("lead_score", { ascending: false });
 
       if (error) throw error;
 
-      // Fetch profiles separately
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, subscription_plan, subscription_end_date, manual_subscription, selected_groups_count, manual_groups_limit");
-
-      if (profilesError) throw profilesError;
-
-      // Merge data
-      const mergedData = (leadsData || []).map((lead) => {
-        const profile = profilesData?.find((p) => p.id === lead.user_id);
-        
-        if (!profile) {
-          console.warn(`⚠️ Profile não encontrado para user_id: ${lead.user_id}`);
-        }
-        
-        return {
-          ...lead,
-          profiles: profile || {
-            full_name: "Nome não encontrado",
-            email: "Email não encontrado",
-            subscription_plan: "free",
-            subscription_end_date: null,
-            manual_subscription: false,
-            selected_groups_count: 0,
-            manual_groups_limit: null,
-          },
-        };
-      });
-
-      setLeads(mergedData as any);
+      setLeads(data || []);
     } catch (error: any) {
       console.error("Error fetching leads:", error);
       toast.error("Erro ao carregar leads");

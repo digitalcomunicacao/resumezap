@@ -19,15 +19,18 @@ export const signUp = async (email: string, password: string, fullName: string) 
 
   // Garantir que o profile seja criado/atualizado com email e nome
   if (data.user) {
+    // Aguardar trigger criar o profile
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ 
+      .upsert({ 
+        id: data.user.id,
         full_name: fullName,
         email: email 
-      })
-      .eq('id', data.user.id);
+      }, { onConflict: 'id' });
 
-    if (profileError) console.error('❌ Erro ao atualizar profile:', profileError);
+    if (profileError) console.error('❌ Erro ao criar/atualizar profile:', profileError);
   }
 
   return { data, error };

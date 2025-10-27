@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 export function OverviewMetrics() {
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
+    newLeads: 0,
     trialsActive: 0,
     trialsPermanent: 0,
     trialsExpiring: 0,
@@ -17,8 +18,9 @@ export function OverviewMetrics() {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [usersRes, trialsRes, stripeRes] = await Promise.all([
+        const [usersRes, leadsRes, trialsRes, stripeRes] = await Promise.all([
           supabase.from('profiles').select('id', { count: 'exact', head: true }),
+          supabase.from('lead_qualification').select('id', { count: 'exact', head: true }),
           supabase.from('profiles').select('manual_subscription, subscription_end_date').eq('manual_subscription', true),
           supabase.from('profiles').select('id', { count: 'exact', head: true }).not('stripe_customer_id', 'is', null),
         ]);
@@ -34,11 +36,13 @@ export function OverviewMetrics() {
         }).length;
 
         const totalUsers = usersRes.count || 0;
+        const newLeads = leadsRes.count || 0;
         const stripeSubscriptions = stripeRes.count || 0;
         const conversionRate = totalUsers > 0 ? ((stripeSubscriptions / totalUsers) * 100) : 0;
 
         setMetrics({
           totalUsers,
+          newLeads,
           trialsActive: trialsData.length,
           trialsPermanent,
           trialsExpiring,
@@ -59,7 +63,7 @@ export function OverviewMetrics() {
     {
       title: "Total de Usuários",
       value: metrics.totalUsers,
-      subtitle: "usuários cadastrados",
+      subtitle: `${metrics.newLeads} qualificados`,
       icon: Users,
       color: "text-blue-500",
     },
