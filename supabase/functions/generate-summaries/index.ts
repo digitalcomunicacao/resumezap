@@ -150,6 +150,70 @@ serve(async (req) => {
       return null;
     };
 
+    // Light phone formatter to produce readable identifiers from JIDs/phone numbers
+    function formatPhoneNumber(digits: string): string {
+      const only = (digits || '').replace(/\D/g, '');
+      if (only.length >= 12) {
+        const cc = only.slice(0, 2);
+        const area = only.slice(2, 4);
+        const rest = only.slice(4);
+        if (rest.length >= 9) {
+          return `+${cc} (${area}) ${rest.slice(0,5)}-${rest.slice(5,9)}`;
+        }
+        return `+${cc} (${area}) ${rest}`;
+      }
+      if (only.length >= 10) {
+        const area = only.slice(0, 2);
+        const rest = only.slice(2);
+        if (rest.length >= 9) {
+          return `(${area}) ${rest.slice(0,5)}-${rest.slice(5,9)}`;
+        }
+        return `(${area}) ${rest}`;
+      }
+      if (only.length >= 4) return `***${only.slice(-4)}`;
+      return 'Desconhecido';
+    }
+
+    // Helper to extract the best-possible sender name
+    const extractSenderName = (msg: any, youLabel: string = 'Você'): string => {
+      try {
+        // If the message is sent by the authenticated user
+        if (msg?.key?.fromMe) return youLabel;
+
+        const candidates: any[] = [
+          msg?.pushName,
+          msg?.sender?.name,
+          msg?.senderName,
+          msg?.notifyName,
+          msg?.message?.extendedTextMessage?.contextInfo?.participant,
+          msg?.key?.participant,
+          msg?.participant,
+          msg?.author,
+          msg?.participant?.id,
+        ].filter(Boolean);
+
+        let name = candidates[0];
+        if (typeof name === 'string') {
+          // If it's a JID, prettify it
+          if (name.includes('@')) {
+            const digits = name.split('@')[0];
+            if (digits) name = formatPhoneNumber(digits);
+          }
+          return name;
+        }
+
+        const jid: string | undefined = msg?.key?.participant || msg?.participant || msg?.key?.remoteJid;
+        if (jid && typeof jid === 'string') {
+          const digits = jid.split('@')[0];
+          if (digits) return formatPhoneNumber(digits);
+        }
+
+        return 'Anônimo';
+      } catch {
+        return 'Anônimo';
+      }
+    };
+
     for (const group of groups) {
       try {
         console.log(`Processing group: ${group.group_name}`);
@@ -229,9 +293,11 @@ serve(async (req) => {
             const text = extractTextContent(msg);
             if (!text) return null;
             
-            const sender = msg.pushName || msg.key?.participant?.split('@')[0] || 'Anônimo';
-            const timestamp = msg.messageTimestamp;
-            const date = new Date(parseInt(timestamp) * (timestamp.toString().length === 10 ? 1000 : 1));
+            const sender = extractSenderName(msg);
+            const rawTs: any = msg.messageTimestamp || msg.timestamp || msg.message?.messageTimestamp;
+            const tsNum = typeof rawTs === 'string' ? parseInt(rawTs) : Number(rawTs);
+            const isSeconds = tsNum && tsNum.toString().length === 10;
+            const date = new Date((isSeconds ? tsNum * 1000 : tsNum) || Date.now());
             const formattedDate = date.toLocaleString('pt-BR', {
               day: '2-digit',
               month: '2-digit',
