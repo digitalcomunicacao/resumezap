@@ -85,10 +85,15 @@ export default function GroupsListModal({
     setError(null);
 
     try {
-      // First, try to get existing groups from database
+      // Buscar o usuário autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Não autenticado');
+
+      // First, try to get existing groups from database (apenas do usuário logado)
       const { data: existingGroups, error: dbError } = await supabase
         .from('whatsapp_groups')
         .select('*')
+        .eq('user_id', user.id)
         .order('group_name');
 
       if (dbError) throw dbError;
