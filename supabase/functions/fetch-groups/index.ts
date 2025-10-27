@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 
     // Fetch groups from Evolution API
     const fetchGroupsResponse = await fetch(
-      `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`,
+      `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=true`,
       {
         method: 'GET',
         headers: {
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
         group_id: group.id,
         group_name: group.subject || 'Sem nome',
         group_image: group.pictureUrl || null,
-        participant_count: group.size || 0,
+        participant_count: group.participants?.length || group.size || 0,
       };
 
       // Check if group already exists
