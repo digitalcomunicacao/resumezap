@@ -27,18 +27,28 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Obter hora atual (Brasília GMT-3)
+    // Calcular hora de Brasília (GMT-3)
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentTimeString = `${currentHour.toString().padStart(2, '0')}:00:00`;
+    const brasiliaOffset = -3; // GMT-3
+    const utcHour = now.getUTCHours();
+    const brasiliaHour = (utcHour + brasiliaOffset + 24) % 24;
+    const currentTimeString = `${brasiliaHour.toString().padStart(2, '0')}:00:00`;
     
-    logStep("Current hour check", { currentHour, currentTimeString });
+    logStep("Current hour check (Brasília time)", { 
+      utcHour, 
+      brasiliaHour, 
+      currentTimeString 
+    });
 
-    // Buscar usuários cujo horário preferido corresponde à hora atual
+    // Buscar usuários com conexão ativa e horário preferido configurado
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, preferred_summary_time')
-      .eq('whatsapp_connected', true);
+      .select(`
+        id, 
+        preferred_summary_time,
+        whatsapp_connections!inner(status)
+      `)
+      .eq('whatsapp_connections.status', 'connected');
 
     if (profilesError) {
       logStep("Error fetching profiles", { error: profilesError });
@@ -47,14 +57,14 @@ serve(async (req) => {
 
     logStep("Profiles found", { count: profiles?.length || 0 });
 
-    // Filtrar usuários cujo horário preferido é a hora atual
+    // Filtrar usuários cujo horário preferido é a hora atual (Brasília)
     const usersToProcess = profiles?.filter(p => {
       if (!p.preferred_summary_time) return false;
       const [hour] = p.preferred_summary_time.split(':');
-      return parseInt(hour) === currentHour;
+      return parseInt(hour) === brasiliaHour;
     }) || [];
 
-    logStep("Users to process this hour", { count: usersToProcess.length, currentHour });
+    logStep("Users to process this hour", { count: usersToProcess.length, brasiliaHour });
 
     if (usersToProcess.length === 0) {
       logStep("No users scheduled for this hour");
@@ -243,14 +253,14 @@ serve(async (req) => {
       total: usersToProcess.length, 
       success: successCount, 
       errors: errorCount,
-      currentHour 
+      brasiliaHour 
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `Processed ${usersToProcess.length} users for hour ${currentTimeString}`,
-        currentHour,
+        brasiliaHour,
         successCount,
         errorCount,
         results
