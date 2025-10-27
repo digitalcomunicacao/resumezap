@@ -52,24 +52,29 @@ serve(async (req) => {
     
     logStep("Profile data retrieved", { profile });
 
-    // If manual subscription is active and not expired, use it
+    // If manual subscription is active, check expiration
     if (profile?.manual_subscription && profile.subscription_plan !== 'free') {
+      const now = new Date();
       const endDate = profile.subscription_end_date ? new Date(profile.subscription_end_date) : null;
-      const isExpired = endDate && endDate < new Date();
       
       logStep("Manual subscription check", { 
         hasEndDate: !!endDate, 
-        isExpired, 
-        plan: profile.subscription_plan 
+        plan: profile.subscription_plan,
+        endDate: endDate?.toISOString()
       });
 
-      // If expired, revert to free plan
-      if (isExpired) {
-        logStep("Manual subscription expired, reverting to free");
+      // If has end date and is expired, revert to free
+      if (endDate && endDate <= now) {
+        logStep("Manual subscription expired, reverting to free", { 
+          expiredAt: endDate.toISOString(),
+          userId: user.id 
+        });
+        
         await supabaseClient
           .from('profiles')
           .update({
             subscription_plan: 'free',
+            subscription_status: 'inactive',
             manual_subscription: false,
             subscription_end_date: null
           })
@@ -86,11 +91,16 @@ serve(async (req) => {
         });
       }
 
-      // Manual subscription is active, return it
-      if (!isExpired || !endDate) {
-        logStep("Using manual subscription", { plan: profile.subscription_plan });
+      // If no end date or not expired, keep manual subscription active
+      if (!endDate || endDate > now) {
+        logStep("Active manual subscription", { 
+          plan: profile.subscription_plan,
+          endDate: endDate?.toISOString(),
+          permanent: !endDate
+        });
+        
         return new Response(JSON.stringify({
-          subscribed: profile.subscription_plan !== 'free',
+          subscribed: true,
           product_id: null,
           subscription_end: profile.subscription_end_date,
           subscription_plan: profile.subscription_plan,

@@ -33,7 +33,7 @@ const PLANS = [
 export function EditUserPlanModal({ user, onClose }: EditUserPlanModalProps) {
   const [newPlan, setNewPlan] = useState<string>(user.subscription_plan);
   const [endDate, setEndDate] = useState<string>(
-    user.subscription_end_date ? format(new Date(user.subscription_end_date), "yyyy-MM-dd") : ""
+    user.subscription_end_date ? format(new Date(user.subscription_end_date), "yyyy-MM-dd'T'HH:mm") : ""
   );
   const [note, setNote] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -141,14 +141,17 @@ export function EditUserPlanModal({ user, onClose }: EditUserPlanModalProps) {
 
           {newPlan !== "free" && (
             <div className="space-y-2">
-              <Label htmlFor="endDate">Data de Término da Assinatura</Label>
+              <Label htmlFor="endDate">Data de Expiração (Trial)</Label>
               <Input
                 id="endDate"
-                type="date"
+                type="datetime-local"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                min={format(new Date(), "yyyy-MM-dd")}
+                min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
               />
+              <p className="text-xs text-muted-foreground">
+                Deixe vazio para acesso permanente (trial sem expiração)
+              </p>
             </div>
           )}
 

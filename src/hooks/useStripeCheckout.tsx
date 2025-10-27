@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-declare global {
-  interface Window {
-    Stripe: any;
-  }
+interface StripeWindow extends Window {
+  Stripe?: any;
 }
 
 export const useStripeCheckout = (clientSecret: string | null) => {
@@ -23,11 +21,12 @@ export const useStripeCheckout = (clientSecret: string | null) => {
         setError(null);
 
         // Wait for Stripe.js to load
-        if (!window.Stripe) {
+        const stripeWindow = window as StripeWindow;
+        if (!stripeWindow.Stripe) {
           throw new Error('Stripe.js não foi carregado');
         }
 
-        const stripe = window.Stripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+        const stripe = stripeWindow.Stripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
         
         const checkout = await stripe.initEmbeddedCheckout({
           clientSecret,

@@ -63,6 +63,13 @@ serve(async (req) => {
     
     logStep("Creating PaymentIntent", { amount, currency: price.currency });
 
+    // Clear manual_subscription when user creates a Stripe checkout
+    logStep("Clearing manual subscription flag");
+    await supabaseClient
+      .from('profiles')
+      .update({ manual_subscription: false })
+      .eq('id', user.id);
+
     // Create a PaymentIntent instead of a Checkout Session
     const paymentIntent = await stripe.paymentIntents.create({
       amount,

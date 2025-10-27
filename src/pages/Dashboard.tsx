@@ -343,13 +343,22 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent className="space-y-2">
                 {subscriptionPlan !== 'free' ? (
-                  <Button 
-                    className="w-full" 
-                    variant="outline"
-                    onClick={openCustomerPortal}
-                  >
-                    Gerenciar Assinatura
-                  </Button>
+                  profile?.manual_subscription ? (
+                    <Button 
+                      className="w-full" 
+                      onClick={() => setShowPricingModal(true)}
+                    >
+                      Assinar Agora
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full" 
+                      variant="outline"
+                      onClick={openCustomerPortal}
+                    >
+                      Gerenciar Assinatura
+                    </Button>
+                  )
                 ) : (
                   <Button 
                     className="w-full" 
