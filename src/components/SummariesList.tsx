@@ -74,7 +74,26 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
 
       if (error) throw error;
 
-      toast.success(`✅ ${data.summaries_count} resumo(s) gerado(s) com sucesso!`);
+      if (data.summaries_count === 0) {
+        // Check details for specific reasons
+        const details = data.details || [];
+        const noMessages = details.filter((d: any) => d.reason === 'no_messages').length;
+        const noText = details.filter((d: any) => d.reason === 'no_text_messages').length;
+        
+        let description = "Nenhuma mensagem de texto encontrada no período (últimas 24h).";
+        if (noMessages > 0) {
+          description += ` ${noMessages} grupo(s) sem mensagens.`;
+        }
+        if (noText > 0) {
+          description += ` ${noText} grupo(s) sem mensagens de texto.`;
+        }
+        description += " Dica: envie mensagens no grupo e tente novamente.";
+        
+        toast.info(description);
+      } else {
+        toast.success(`✅ ${data.summaries_count} resumo(s) gerado(s) com sucesso!`);
+      }
+
       await fetchSummaries();
     } catch (error: any) {
       console.error("Error generating summaries:", error);

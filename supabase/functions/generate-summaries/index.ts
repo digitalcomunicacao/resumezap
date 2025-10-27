@@ -61,76 +61,158 @@ serve(async (req) => {
     console.log(`Found ${groups.length} selected groups`);
 
     const summariesGenerated = [];
+    const groupDetails = [];
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
-    const timestampFrom = Math.floor(yesterday.getTime() / 1000);
+    const timestampFromSeconds = Math.floor(yesterday.getTime() / 1000);
+    const timestampFromMs = yesterday.getTime();
+
+    // Helper function to extract messages from various API response formats
+    const extractMessages = (data: any): any[] => {
+      if (Array.isArray(data)) return data;
+      
+      // Common keys to check
+      const possibleKeys = ['data', 'messages', 'result', 'items', 'records'];
+      for (const key of possibleKeys) {
+        if (data?.[key] && Array.isArray(data[key])) {
+          return data[key];
+        }
+        // Check nested structures (e.g., result.messages)
+        if (data?.[key] && typeof data[key] === 'object') {
+          for (const nestedKey of possibleKeys) {
+            if (Array.isArray(data[key][nestedKey])) {
+              return data[key][nestedKey];
+            }
+          }
+        }
+      }
+      return [];
+    };
+
+    // Helper function to extract text content from message
+    const extractTextContent = (msg: any): string | null => {
+      const message = msg.message;
+      if (!message) return null;
+
+      // Text messages
+      if (message.conversation) return message.conversation;
+      if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+      
+      // Media captions
+      if (message.imageMessage?.caption) return message.imageMessage.caption;
+      if (message.videoMessage?.caption) return message.videoMessage.caption;
+      if (message.documentMessage?.caption) return message.documentMessage.caption;
+      
+      // Interactive messages
+      if (message.buttonsResponseMessage?.selectedDisplayText) {
+        return message.buttonsResponseMessage.selectedDisplayText;
+      }
+      if (message.listResponseMessage?.title) {
+        return message.listResponseMessage.title;
+      }
+      
+      return null;
+    };
 
     for (const group of groups) {
       try {
         console.log(`Processing group: ${group.group_name}`);
+        let messages: any[] = [];
+        let fetchMethod = 'seconds';
 
-        // Fetch messages from Evolution API
+        // Fetch messages from Evolution API - First try with seconds
         const messagesUrl = `${evolutionApiUrl}/chat/findMessages/${connection.instance_name}`;
-        const messagesResponse = await fetch(messagesUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
-          body: JSON.stringify({
-            where: {
-              key: {
-                remoteJid: group.group_id,
-              },
-              messageTimestamp: {
-                $gte: timestampFrom,
-              },
-            },
-            limit: 500,
-          }),
-        });
-
-        if (!messagesResponse.ok) {
-          console.error(`Failed to fetch messages for group ${group.group_name}`);
-          continue;
-        }
-
-        const messagesData = await messagesResponse.json();
         
-        // Extract messages array from response (handle different API response formats)
-        let messages = [];
-        if (Array.isArray(messagesData)) {
-          messages = messagesData;
-        } else if (messagesData?.data && Array.isArray(messagesData.data)) {
-          messages = messagesData.data;
-        } else if (messagesData?.messages && Array.isArray(messagesData.messages)) {
-          messages = messagesData.messages;
-        }
+        const fetchMessages = async (timestamp: number, method: string) => {
+          const response = await fetch(messagesUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': evolutionApiKey,
+            },
+            body: JSON.stringify({
+              where: {
+                key: {
+                  remoteJid: group.group_id,
+                },
+                messageTimestamp: {
+                  $gte: timestamp,
+                },
+              },
+              limit: 500,
+            }),
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const extracted = extractMessages(data);
+          console.log(`Fetched with ${method}: ${extracted.length} messages for ${group.group_name}`);
+          return extracted;
+        };
 
-        console.log(`Found ${typeof messages} messages for ${group.group_name}`, messages.length);
-
-        if (!Array.isArray(messages) || messages.length === 0) {
-          console.log(`No messages found for group ${group.group_name}`);
+        try {
+          messages = await fetchMessages(timestampFromSeconds, 'seconds');
+          fetchMethod = 'seconds';
+          
+          // If no messages with seconds, retry with milliseconds
+          if (messages.length === 0) {
+            console.log(`Retrying with milliseconds for ${group.group_name}`);
+            messages = await fetchMessages(timestampFromMs, 'milliseconds');
+            fetchMethod = 'milliseconds';
+          }
+        } catch (fetchError) {
+          console.error(`Failed to fetch messages for group ${group.group_name}:`, fetchError);
+          groupDetails.push({
+            group_name: group.group_name,
+            fetched_count: 0,
+            text_count: 0,
+            reason: 'fetch_error'
+          });
           continue;
         }
 
-        console.log(`Processing ${messages.length} messages for ${group.group_name}`);
+        if (messages.length === 0) {
+          console.log(`No messages found for group ${group.group_name}`);
+          groupDetails.push({
+            group_name: group.group_name,
+            fetched_count: 0,
+            text_count: 0,
+            reason: 'no_messages'
+          });
+          continue;
+        }
 
-        // Format messages for AI
+        console.log(`Processing ${messages.length} messages (via ${fetchMethod}) for ${group.group_name}`);
+
+        // Format messages for AI - extract text from various message types
         const formattedMessages = messages
-          .filter((msg: any) => msg.message?.conversation || msg.message?.extendedTextMessage?.text)
           .map((msg: any) => {
-            const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+            const text = extractTextContent(msg);
+            if (!text) return null;
             const sender = msg.pushName || 'Anônimo';
             return `${sender}: ${text}`;
           })
+          .filter(Boolean)
           .join('\n');
 
+        const textMessageCount = formattedMessages.split('\n').length;
+
         if (formattedMessages.length === 0) {
-          console.log(`No text messages found for group ${group.group_name}`);
+          console.log(`No text content found in ${messages.length} messages for group ${group.group_name}`);
+          groupDetails.push({
+            group_name: group.group_name,
+            fetched_count: messages.length,
+            text_count: 0,
+            reason: 'no_text_messages'
+          });
           continue;
         }
+
+        console.log(`Found ${textMessageCount} text messages from ${messages.length} total messages`);
 
         // Generate summary using Lovable AI
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -190,10 +272,24 @@ serve(async (req) => {
           message_count: messages.length,
         });
 
-        console.log(`Summary generated for ${group.group_name}`);
+        groupDetails.push({
+          group_name: group.group_name,
+          fetched_count: messages.length,
+          text_count: textMessageCount,
+          reason: 'success',
+          fetch_method: fetchMethod
+        });
+
+        console.log(`Summary generated for ${group.group_name} (${textMessageCount} text messages from ${messages.length} total)`);
 
       } catch (groupError) {
         console.error(`Error processing group ${group.group_name}:`, groupError);
+        groupDetails.push({
+          group_name: group.group_name,
+          fetched_count: 0,
+          text_count: 0,
+          reason: 'processing_error'
+        });
         continue;
       }
     }
@@ -203,6 +299,7 @@ serve(async (req) => {
         success: true,
         summaries_count: summariesGenerated.length,
         summaries: summariesGenerated,
+        details: groupDetails,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
