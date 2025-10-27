@@ -212,7 +212,76 @@ export function FunnelMetrics() {
 
         {/* Métricas Chave */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Conversão Geral */}
+          {/* 1. Total de Visitantes */}
+          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.visitors}20` }}>
+                  <Users className="w-6 h-6" style={{ color: COLORS.visitors }} />
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  Etapa 1
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mb-1">
+                Visitantes
+              </p>
+              <p className="text-3xl font-bold" style={{ color: COLORS.visitors }}>
+                {stages[0]?.value.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Total absoluto
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 2. Cadastros */}
+          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.signups}20` }}>
+                  <UserPlus className="w-6 h-6" style={{ color: COLORS.signups }} />
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  Etapa 2
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mb-1">
+                Cadastros
+              </p>
+              <p className="text-3xl font-bold" style={{ color: COLORS.signups }}>
+                {stages[1]?.value.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {stages[1]?.conversionRate?.toFixed(1)}% dos visitantes
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 3. WhatsApp Conectado */}
+          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.whatsapp}20` }}>
+                  <MessageCircle className="w-6 h-6" style={{ color: COLORS.whatsapp }} />
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  Etapa 3
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mb-1">
+                WhatsApp Conectado
+              </p>
+              <p className="text-3xl font-bold" style={{ color: COLORS.whatsapp }}>
+                {stages[2]?.value.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {signupToWhatsApp.toFixed(1)}% dos cadastros
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 4. Conversão Total */}
           <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-3">
@@ -231,75 +300,6 @@ export function FunnelMetrics() {
               </p>
               <p className="text-xs text-muted-foreground mt-2">
                 Visitantes → Assinantes
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Cadastro → WhatsApp */}
-          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.whatsapp}20` }}>
-                  <MessageCircle className="w-6 h-6" style={{ color: COLORS.whatsapp }} />
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  Etapa 2
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Taxa de Conexão
-              </p>
-              <p className="text-3xl font-bold" style={{ color: COLORS.whatsapp }}>
-                {signupToWhatsApp.toFixed(1)}%
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Cadastro → WhatsApp
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* WhatsApp → Assinante */}
-          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.subscribers}20` }}>
-                  <CreditCard className="w-6 h-6" style={{ color: COLORS.subscribers }} />
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  Etapa 3
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Taxa de Conversão
-              </p>
-              <p className="text-3xl font-bold" style={{ color: COLORS.subscribers }}>
-                {whatsappToSubscriber.toFixed(1)}%
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                WhatsApp → Assinante
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Total de Visitantes */}
-          <Card className="shadow-soft hover:shadow-hover transition-all duration-300 border-2">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: `${COLORS.visitors}20` }}>
-                  <Users className="w-6 h-6" style={{ color: COLORS.visitors }} />
-                </div>
-                <Badge variant="secondary" className="text-xs">
-                  Total
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mb-1">
-                Total de Visitantes
-              </p>
-              <p className="text-3xl font-bold" style={{ color: COLORS.visitors }}>
-                {stages[0]?.value.toLocaleString()}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Base do funil
               </p>
             </CardContent>
           </Card>
