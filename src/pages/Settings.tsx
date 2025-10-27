@@ -6,8 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
-import { SummaryPreferences } from "@/components/settings/SummaryPreferences";
-import { IntegrationsSettings } from "@/components/settings/IntegrationsSettings";
 import { AccountSettings } from "@/components/settings/AccountSettings";
 
 const Settings = () => {
@@ -49,23 +47,13 @@ const Settings = () => {
 
           <Card className="shadow-soft">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="general">Geral</TabsTrigger>
-                <TabsTrigger value="summaries">Resumos</TabsTrigger>
-                <TabsTrigger value="integrations">Integrações</TabsTrigger>
                 <TabsTrigger value="account">Conta</TabsTrigger>
               </TabsList>
 
               <TabsContent value="general" className="space-y-4">
                 <GeneralSettings userId={user?.id || ''} />
-              </TabsContent>
-
-              <TabsContent value="summaries" className="space-y-4">
-                <SummaryPreferences userId={user?.id || ''} />
-              </TabsContent>
-
-              <TabsContent value="integrations" className="space-y-4">
-                <IntegrationsSettings userId={user?.id || ''} />
               </TabsContent>
 
               <TabsContent value="account" className="space-y-4">
