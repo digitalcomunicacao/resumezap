@@ -21,7 +21,12 @@ export type Database = {
           full_name: string | null
           id: string
           selected_groups_count: number | null
+          stripe_customer_id: string | null
+          stripe_product_id: string | null
+          stripe_subscription_id: string | null
+          subscription_end_date: string | null
           subscription_plan: string | null
+          subscription_status: string | null
           updated_at: string | null
           whatsapp_connected: boolean | null
           whatsapp_instance_id: string | null
@@ -32,7 +37,12 @@ export type Database = {
           full_name?: string | null
           id: string
           selected_groups_count?: number | null
+          stripe_customer_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_end_date?: string | null
           subscription_plan?: string | null
+          subscription_status?: string | null
           updated_at?: string | null
           whatsapp_connected?: boolean | null
           whatsapp_instance_id?: string | null
@@ -43,10 +53,48 @@ export type Database = {
           full_name?: string | null
           id?: string
           selected_groups_count?: number | null
+          stripe_customer_id?: string | null
+          stripe_product_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_end_date?: string | null
           subscription_plan?: string | null
+          subscription_status?: string | null
           updated_at?: string | null
           whatsapp_connected?: boolean | null
           whatsapp_instance_id?: string | null
+        }
+        Relationships: []
+      }
+      scheduled_executions: {
+        Row: {
+          created_at: string | null
+          details: Json | null
+          errors_count: number | null
+          execution_time: string | null
+          id: string
+          status: string
+          summaries_generated: number | null
+          users_processed: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json | null
+          errors_count?: number | null
+          execution_time?: string | null
+          id?: string
+          status: string
+          summaries_generated?: number | null
+          users_processed?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json | null
+          errors_count?: number | null
+          execution_time?: string | null
+          id?: string
+          status?: string
+          summaries_generated?: number | null
+          users_processed?: number | null
         }
         Relationships: []
       }
@@ -180,7 +228,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      trigger_daily_summaries_manually: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never

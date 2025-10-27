@@ -12,11 +12,6 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL')!;
@@ -25,21 +20,45 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from auth token
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
-      throw new Error('Invalid user token');
+    // Check for user ID in custom header (for scheduled tasks)
+    const scheduledUserId = req.headers.get('x-user-id');
+    
+    let userId: string;
+    
+    if (scheduledUserId) {
+      // Scheduled task - validate service role key
+      const authHeader = req.headers.get('Authorization');
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      
+      if (!authHeader || !authHeader.includes(serviceKey || '')) {
+        throw new Error('Unauthorized scheduled task');
+      }
+      
+      userId = scheduledUserId;
+      console.log(`[GENERATE-SUMMARIES] Processing scheduled task for user: ${userId}`);
+    } else {
+      // Regular request - use JWT
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        throw new Error('Missing authorization header');
+      }
+      
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      
+      if (userError || !user) {
+        throw new Error('Invalid user token');
+      }
+      
+      userId = user.id;
+      console.log(`Generating summaries for user: ${userId}`);
     }
-
-    console.log(`Generating summaries for user: ${user.id}`);
 
     // Get user's WhatsApp connection
     const { data: connection, error: connectionError } = await supabase
       .from('whatsapp_connections')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'connected')
       .maybeSingle();
 
@@ -51,7 +70,7 @@ serve(async (req) => {
     const { data: groups, error: groupsError } = await supabase
       .from('whatsapp_groups')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('is_selected', true);
 
     if (groupsError || !groups || groups.length === 0) {
@@ -254,7 +273,7 @@ serve(async (req) => {
         const { error: insertError } = await supabase
           .from('summaries')
           .insert({
-            user_id: user.id,
+            user_id: userId,
             group_id: group.group_id,
             group_name: group.group_name,
             summary_text: summaryText,
