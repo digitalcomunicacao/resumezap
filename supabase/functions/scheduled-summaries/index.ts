@@ -27,10 +27,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Calcular hora de Brasília (GMT-3)
+    // Obter hora atual em Brasília (GMT-3)
     const now = new Date();
-    const brasiliaOffset = -3; // GMT-3
     const utcHour = now.getUTCHours();
+    const brasiliaOffset = -3; // GMT-3
     const brasiliaHour = (utcHour + brasiliaOffset + 24) % 24;
     const currentTimeString = `${brasiliaHour.toString().padStart(2, '0')}:00:00`;
     
@@ -40,7 +40,7 @@ serve(async (req) => {
       currentTimeString 
     });
 
-    // Buscar usuários com conexão ativa e horário preferido configurado
+    // Buscar usuários com conexão ativa do WhatsApp
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select(`
@@ -71,7 +71,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `No users scheduled for ${currentTimeString}`,
+          message: `No users scheduled for ${currentTimeString} (Brasília GMT-3)`,
           processed: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -259,8 +259,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${usersToProcess.length} users for hour ${currentTimeString}`,
+        message: `Processed ${usersToProcess.length} users for hour ${currentTimeString} (Brasília GMT-3)`,
         brasiliaHour,
+        utcHour,
         successCount,
         errorCount,
         results
