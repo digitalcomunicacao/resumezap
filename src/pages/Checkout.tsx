@@ -232,22 +232,31 @@ const Checkout = () => {
                           fontWeightMedium: '500',
                           fontWeightBold: '600',
                         },
-                        rules: {
-                          '.Input': {
-                            padding: '12px',
-                            fontSize: '15px',
-                            lineHeight: '1.5',
-                          },
-                          '.Label': {
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            marginBottom: '6px',
-                          },
-                          '.Tab': {
-                            padding: '12px 16px',
-                            fontSize: '15px',
-                          },
-                        },
+          rules: {
+            '.Input': {
+              padding: '12px',
+              fontSize: '15px',
+              lineHeight: '1.5',
+            },
+            '.Label': {
+              fontSize: '14px',
+              fontWeight: '500',
+              marginBottom: '6px',
+            },
+            '.Tab': {
+              padding: '12px 16px',
+              fontSize: '15px',
+            },
+            '.Row': {
+              display: 'block !important',
+              width: '100%',
+            },
+            '.RowItem': {
+              display: 'block !important',
+              width: '100% !important',
+              marginBottom: '12px',
+            },
+          },
                       },
                     }}
                   >
