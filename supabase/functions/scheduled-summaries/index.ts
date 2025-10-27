@@ -27,35 +27,42 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Obter hora atual em Brasília (GMT-3)
+    // Obter hora atual (Brasília GMT-3)
     const now = new Date();
-    const currentHour = now.getUTCHours() - 3; // Ajustar para GMT-3
-    const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
-    const timeToMatch = `${adjustedHour.toString().padStart(2, '0')}:00:00`;
+    const currentHour = now.getHours();
+    const currentTimeString = `${currentHour.toString().padStart(2, '0')}:00:00`;
+    
+    logStep("Current hour check", { currentHour, currentTimeString });
 
-    logStep("Checking for users with preferred time", { currentHour: adjustedHour, timeToMatch });
-
-    // Buscar perfis de usuários cujo horário preferido corresponde à hora atual
+    // Buscar usuários cujo horário preferido corresponde à hora atual
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, preferred_summary_time')
-      .eq('preferred_summary_time', timeToMatch);
+      .eq('whatsapp_connected', true);
 
     if (profilesError) {
       logStep("Error fetching profiles", { error: profilesError });
       throw profilesError;
     }
 
-    logStep("Profiles found with matching time", { count: profiles?.length || 0 });
+    logStep("Profiles found", { count: profiles?.length || 0 });
 
-    if (!profiles || profiles.length === 0) {
-      logStep("No users with preferred time matching current hour");
+    // Filtrar usuários cujo horário preferido é a hora atual
+    const usersToProcess = profiles?.filter(p => {
+      if (!p.preferred_summary_time) return false;
+      const [hour] = p.preferred_summary_time.split(':');
+      return parseInt(hour) === currentHour;
+    }) || [];
+
+    logStep("Users to process this hour", { count: usersToProcess.length, currentHour });
+
+    if (usersToProcess.length === 0) {
+      logStep("No users scheduled for this hour");
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `No users scheduled for ${timeToMatch}`,
-          processed: 0,
-          currentHour: adjustedHour
+          message: `No users scheduled for ${currentTimeString}`,
+          processed: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -65,40 +72,29 @@ serve(async (req) => {
     let errorCount = 0;
     const results = [];
 
-    // Processar cada usuário
-    for (const profile of profiles) {
+    // Processar cada usuário filtrado
+    for (const profile of usersToProcess) {
       try {
+        logStep("Processing user", { userId: profile.id });
+
         // Verificar se o usuário tem conexão ativa do WhatsApp
         const { data: connection, error: connectionError } = await supabase
           .from('whatsapp_connections')
-          .select('instance_name')
+          .select('*')
           .eq('user_id', profile.id)
           .eq('status', 'connected')
           .maybeSingle();
 
-        if (connectionError) {
-          logStep("Error fetching connection", { userId: profile.id, error: connectionError });
+        if (connectionError || !connection) {
+          logStep("No active WhatsApp connection", { userId: profile.id });
           errorCount++;
           results.push({
             userId: profile.id,
             success: false,
-            error: 'Error fetching connection'
+            error: 'No active WhatsApp connection'
           });
           continue;
         }
-
-        if (!connection) {
-          logStep("User has no active connection", { userId: profile.id });
-          errorCount++;
-          results.push({
-            userId: profile.id,
-            success: false,
-            error: 'No active connection'
-          });
-          continue;
-        }
-
-        logStep("Processing user", { userId: profile.id });
 
         // Buscar o usuário
         const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(
@@ -164,16 +160,17 @@ serve(async (req) => {
     }
 
     logStep("Cron job completed", { 
-      total: profiles.length, 
+      total: usersToProcess.length, 
       success: successCount, 
-      errors: errorCount 
+      errors: errorCount,
+      currentHour 
     });
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${profiles.length} users at ${timeToMatch}`,
-        currentHour: adjustedHour,
+        message: `Processed ${usersToProcess.length} users for hour ${currentTimeString}`,
+        currentHour,
         successCount,
         errorCount,
         results

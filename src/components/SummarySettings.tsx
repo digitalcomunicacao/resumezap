@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 interface SummarySettingsProps {
   userId: string;
-  currentTime: string;
+  currentTime?: string;
 }
 
 export function SummarySettings({ userId, currentTime }: SummarySettingsProps) {
@@ -25,6 +25,7 @@ export function SummarySettings({ userId, currentTime }: SummarySettingsProps) {
 
     if (error) {
       toast.error("Erro ao salvar configuração");
+      console.error("Error saving preferred time:", error);
     } else {
       toast.success("Horário atualizado com sucesso!");
     }
@@ -44,12 +45,12 @@ export function SummarySettings({ userId, currentTime }: SummarySettingsProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="summary-time">Horário Preferido</Label>
+          <Label>Horário Preferido</Label>
           <Select value={selectedTime} onValueChange={setSelectedTime}>
-            <SelectTrigger id="summary-time">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-card">
+            <SelectContent className="max-h-[200px]">
               {Array.from({ length: 24 }, (_, i) => {
                 const hour = i.toString().padStart(2, '0');
                 return (
