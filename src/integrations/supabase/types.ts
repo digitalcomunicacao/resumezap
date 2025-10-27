@@ -22,6 +22,7 @@ export type Database = {
           id: string
           preferred_summary_time: string | null
           selected_groups_count: number | null
+          send_summary_to_group: boolean | null
           stripe_customer_id: string | null
           stripe_product_id: string | null
           stripe_subscription_id: string | null
@@ -39,6 +40,7 @@ export type Database = {
           id: string
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
+          send_summary_to_group?: boolean | null
           stripe_customer_id?: string | null
           stripe_product_id?: string | null
           stripe_subscription_id?: string | null
@@ -56,6 +58,7 @@ export type Database = {
           id?: string
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
+          send_summary_to_group?: boolean | null
           stripe_customer_id?: string | null
           stripe_product_id?: string | null
           stripe_subscription_id?: string | null
@@ -136,6 +139,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      summary_deliveries: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          evolution_message_id: string | null
+          group_id: string
+          id: string
+          sent_at: string | null
+          status: string
+          summary_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          evolution_message_id?: string | null
+          group_id: string
+          id?: string
+          sent_at?: string | null
+          status?: string
+          summary_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          evolution_message_id?: string | null
+          group_id?: string
+          id?: string
+          sent_at?: string | null
+          status?: string
+          summary_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "summary_deliveries_summary_id_fkey"
+            columns: ["summary_id"]
+            isOneToOne: false
+            referencedRelation: "summaries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_connections: {
         Row: {

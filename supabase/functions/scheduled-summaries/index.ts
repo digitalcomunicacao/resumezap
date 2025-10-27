@@ -142,10 +142,74 @@ serve(async (req) => {
         } else {
           logStep("Summaries generated successfully", { userId: profile.id, data: summaryData });
           successCount++;
+          
+          // Verificar se deve enviar resumos para os grupos
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('send_summary_to_group')
+            .eq('id', profile.id)
+            .single();
+
+          if (userProfile?.send_summary_to_group) {
+            logStep("Sending summaries to groups", { userId: profile.id });
+            
+            // Buscar resumos recém-criados
+            const { data: summaries } = await supabase
+              .from('summaries')
+              .select('*')
+              .eq('user_id', profile.id)
+              .eq('summary_date', new Date().toISOString().split('T')[0])
+              .order('created_at', { ascending: false });
+
+            // Enviar cada resumo para seu respectivo grupo
+            for (const summary of summaries || []) {
+              try {
+                const sendResponse = await fetch(
+                  `${supabaseUrl}/functions/v1/send-group-summary`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${supabaseServiceKey}`,
+                    },
+                    body: JSON.stringify({
+                      summaryId: summary.id,
+                      userId: summary.user_id,
+                      groupId: summary.group_id,
+                      groupName: summary.group_name,
+                      summaryText: summary.summary_text,
+                      instanceName: connection.instance_name,
+                    }),
+                  }
+                );
+
+                const sendData = await sendResponse.json();
+                
+                if (!sendResponse.ok) {
+                  logStep("Failed to send summary to group", { 
+                    groupId: summary.group_id, 
+                    error: sendData 
+                  });
+                } else {
+                  logStep("Summary sent to group", { 
+                    groupId: summary.group_id, 
+                    messageId: sendData.messageId 
+                  });
+                }
+              } catch (sendError) {
+                logStep("Error sending summary to group", { 
+                  groupId: summary.group_id, 
+                  error: sendError 
+                });
+              }
+            }
+          }
+
           results.push({
             userId: profile.id,
             success: true,
-            summariesCount: summaryData?.summaries?.length || 0
+            summariesCount: summaryData?.summaries?.length || 0,
+            sentToGroups: userProfile?.send_summary_to_group || false,
           });
         }
       } catch (userError) {

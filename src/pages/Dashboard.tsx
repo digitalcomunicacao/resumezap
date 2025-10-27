@@ -315,7 +315,8 @@ const Dashboard = () => {
 
             <SummarySettings 
               userId={user?.id || ''} 
-              currentTime={profile?.preferred_summary_time || "09:00:00"} 
+              currentTime={profile?.preferred_summary_time || "09:00:00"}
+              sendToGroup={profile?.send_summary_to_group ?? true}
             />
           </div>
 
