@@ -1,1 +1,13 @@
 project_id = "wfzjcklrdevhblcuxaoq"
+
+[functions.generate-qr-code]
+verify_jwt = false
+
+[functions.check-whatsapp-status]
+verify_jwt = false
+
+[functions.disconnect-whatsapp]
+verify_jwt = true
+
+[functions.fetch-groups]
+verify_jwt = true

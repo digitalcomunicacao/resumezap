@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,30 +6,30 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('No authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Não autenticado' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
+      { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
 
     if (userError || !user) {
-      console.error('Authentication error:', userError);
+      console.error('User authentication error:', userError);
       return new Response(
         JSON.stringify({ error: 'Não autenticado' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -38,12 +38,12 @@ Deno.serve(async (req) => {
 
     console.log('Fetching groups for user:', user.id);
 
-    // Get user's active WhatsApp connection
+    // Get user's WhatsApp connection
     const { data: connection, error: connectionError } = await supabaseClient
       .from('whatsapp_connections')
       .select('*')
       .eq('user_id', user.id)
-      .eq('status', 'open')
+      .eq('status', 'connected')
       .maybeSingle();
 
     if (connectionError) {
@@ -55,20 +55,20 @@ Deno.serve(async (req) => {
     }
 
     if (!connection) {
+      console.log('No active WhatsApp connection found');
       return new Response(
-        JSON.stringify({ error: 'Nenhuma conexão WhatsApp ativa encontrada' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'WhatsApp não conectado. Conecte seu WhatsApp primeiro.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get Evolution API credentials
     const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
     const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
 
     if (!evolutionApiUrl || !evolutionApiKey) {
-      console.error('Missing Evolution API credentials');
+      console.error('Evolution API credentials not configured');
       return new Response(
-        JSON.stringify({ error: 'Configuração da API Evolution não encontrada' }),
+        JSON.stringify({ error: 'API não configurada corretamente' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -89,62 +89,65 @@ Deno.serve(async (req) => {
 
     if (!fetchGroupsResponse.ok) {
       const errorText = await fetchGroupsResponse.text();
-      console.error('Evolution API fetch groups error:', {
+      console.error('Evolution API error:', {
         status: fetchGroupsResponse.status,
-        body: errorText,
+        error: errorText
       });
-
       return new Response(
-        JSON.stringify({ 
-          error: 'Erro ao buscar grupos do WhatsApp',
-          details: errorText 
-        }),
+        JSON.stringify({ error: 'Erro ao buscar grupos do WhatsApp' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const groupsData = await fetchGroupsResponse.json();
-    console.log('Fetched groups from Evolution API:', groupsData?.length || 0);
+    console.log('Groups fetched from Evolution API:', groupsData.length || 0, 'groups');
 
-    // Process and save groups to database
+    // Process and save groups
     const groups = Array.isArray(groupsData) ? groupsData : [];
     
     if (groups.length === 0) {
+      console.log('No groups found');
       return new Response(
-        JSON.stringify({ 
-          message: 'Nenhum grupo encontrado no WhatsApp',
-          groups: []
-        }),
+        JSON.stringify({ groups: [], message: 'Nenhum grupo encontrado' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Prepare groups data for upsert
-    const groupsToUpsert = groups.map((group: any) => ({
-      user_id: user.id,
-      whatsapp_connection_id: connection.id,
-      group_id: group.id,
-      group_name: group.subject || 'Sem nome',
-      group_image: group.pictureUrl || null,
-      participant_count: group.size || 0,
-    }));
+    // Upsert groups to database
+    for (const group of groups) {
+      const groupData = {
+        user_id: user.id,
+        whatsapp_connection_id: connection.id,
+        group_id: group.id,
+        group_name: group.subject || 'Sem nome',
+        group_image: group.pictureUrl || null,
+        participant_count: group.size || 0,
+      };
 
-    console.log('Upserting groups to database:', groupsToUpsert.length);
+      // Check if group already exists
+      const { data: existingGroup } = await supabaseClient
+        .from('whatsapp_groups')
+        .select('id, is_selected')
+        .eq('user_id', user.id)
+        .eq('group_id', group.id)
+        .maybeSingle();
 
-    // Upsert groups (insert or update if exists)
-    const { error: upsertError } = await supabaseClient
-      .from('whatsapp_groups')
-      .upsert(groupsToUpsert, {
-        onConflict: 'user_id,group_id',
-        ignoreDuplicates: false,
-      });
-
-    if (upsertError) {
-      console.error('Error upserting groups:', upsertError);
-      return new Response(
-        JSON.stringify({ error: 'Erro ao salvar grupos no banco de dados' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (existingGroup) {
+        // Update existing group (keep is_selected value)
+        await supabaseClient
+          .from('whatsapp_groups')
+          .update({
+            group_name: groupData.group_name,
+            group_image: groupData.group_image,
+            participant_count: groupData.participant_count,
+          })
+          .eq('id', existingGroup.id);
+      } else {
+        // Insert new group
+        await supabaseClient
+          .from('whatsapp_groups')
+          .insert(groupData);
+      }
     }
 
     // Fetch all groups from database to return
@@ -152,6 +155,7 @@ Deno.serve(async (req) => {
       .from('whatsapp_groups')
       .select('*')
       .eq('user_id', user.id)
+      .eq('whatsapp_connection_id', connection.id)
       .order('group_name');
 
     if (fetchError) {
@@ -162,18 +166,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Successfully fetched and saved groups:', savedGroups?.length || 0);
+    console.log('Successfully fetched and saved', savedGroups?.length || 0, 'groups');
 
     return new Response(
-      JSON.stringify({ 
-        message: 'Grupos sincronizados com sucesso',
-        groups: savedGroups 
-      }),
+      JSON.stringify({ groups: savedGroups || [] }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Unexpected error in fetch-groups:', error);
+    console.error('Unexpected error:', error);
     return new Response(
       JSON.stringify({ error: 'Erro interno do servidor' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
