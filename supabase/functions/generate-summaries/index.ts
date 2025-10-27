@@ -91,9 +91,11 @@ serve(async (req) => {
     // Get user's summary preferences
     const { data: preferences } = await supabase
       .from('summary_preferences')
-      .select('*')
+      .select('*, timezone')
       .eq('user_id', userId)
       .maybeSingle();
+
+    const userTimezone = preferences?.timezone || 'America/Sao_Paulo';
 
     const summariesGenerated = [];
     const groupDetails = [];
@@ -303,7 +305,8 @@ serve(async (req) => {
               month: '2-digit',
               year: 'numeric',
               hour: '2-digit',
-              minute: '2-digit'
+              minute: '2-digit',
+              timeZone: userTimezone
             });
             
             return `[${formattedDate}] ${sender}: ${text}`;

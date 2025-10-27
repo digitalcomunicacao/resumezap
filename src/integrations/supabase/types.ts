@@ -416,6 +416,7 @@ export type Database = {
           include_sentiment_analysis: boolean | null
           size: string | null
           thematic_focus: string | null
+          timezone: string | null
           tone: string | null
           updated_at: string | null
           user_id: string
@@ -428,6 +429,7 @@ export type Database = {
           include_sentiment_analysis?: boolean | null
           size?: string | null
           thematic_focus?: string | null
+          timezone?: string | null
           tone?: string | null
           updated_at?: string | null
           user_id: string
@@ -440,6 +442,7 @@ export type Database = {
           include_sentiment_analysis?: boolean | null
           size?: string | null
           thematic_focus?: string | null
+          timezone?: string | null
           tone?: string | null
           updated_at?: string | null
           user_id?: string
