@@ -7,37 +7,36 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-interface Lead {
+interface User {
   id: string;
-  user_id: string;
-  profiles: {
-    full_name: string;
-    subscription_plan: string;
-    manual_groups_limit: number | null;
-  };
+  full_name: string;
+  email: string;
+  subscription_plan: string;
+  manual_groups_limit: number | null;
+  selected_groups_count?: number;
 }
 
 interface EditGroupsLimitModalProps {
-  lead: Lead;
+  user: User;
   onClose: () => void;
 }
 
-export const EditGroupsLimitModal = ({ lead, onClose }: EditGroupsLimitModalProps) => {
-  const [limit, setLimit] = useState<number>(lead.profiles.manual_groups_limit || 0);
+export const EditGroupsLimitModal = ({ user, onClose }: EditGroupsLimitModalProps) => {
+  const [limit, setLimit] = useState<number>(user.manual_groups_limit || 0);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Admin não autenticado");
+      const { data: { user: admin } } = await supabase.auth.getUser();
+      if (!admin) throw new Error("Admin não autenticado");
 
       // Atualiza o limite manual
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ manual_groups_limit: limit })
-        .eq("id", lead.user_id);
+        .eq("id", user.id);
 
       if (profileError) throw profileError;
 
@@ -45,11 +44,11 @@ export const EditGroupsLimitModal = ({ lead, onClose }: EditGroupsLimitModalProp
       const { error: logError } = await supabase
         .from("admin_actions")
         .insert({
-          admin_id: user.id,
-          target_user_id: lead.user_id,
+          admin_id: admin.id,
+          target_user_id: user.id,
           action_type: "groups_limit_changed",
           details: {
-            previous_limit: lead.profiles.manual_groups_limit,
+            previous_limit: user.manual_groups_limit,
             new_limit: limit,
             note: note,
           },
@@ -73,14 +72,14 @@ export const EditGroupsLimitModal = ({ lead, onClose }: EditGroupsLimitModalProp
         <DialogHeader>
           <DialogTitle>Editar Limite de Grupos</DialogTitle>
           <DialogDescription>
-            Alterar o limite manual de grupos para {lead.profiles.full_name}
+            Alterar o limite manual de grupos para {user.full_name}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div>
             <Label>Plano Atual</Label>
-            <Input value={lead.profiles.subscription_plan} disabled />
+            <Input value={user.subscription_plan} disabled />
           </div>
 
           <div>

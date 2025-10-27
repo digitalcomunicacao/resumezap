@@ -278,7 +278,14 @@ export const LeadsManagement = () => {
 
       {editingLead && (
         <EditGroupsLimitModal
-          lead={editingLead}
+          user={{
+            id: editingLead.user_id,
+            full_name: editingLead.profiles.full_name,
+            email: editingLead.profiles.email,
+            subscription_plan: editingLead.profiles.subscription_plan,
+            manual_groups_limit: editingLead.profiles.manual_groups_limit,
+            selected_groups_count: editingLead.profiles.selected_groups_count,
+          }}
           onClose={() => {
             setEditingLead(null);
             fetchLeads();

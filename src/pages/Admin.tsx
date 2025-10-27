@@ -13,6 +13,7 @@ import { SummariesAnalytics } from "@/components/analytics/SummariesAnalytics";
 import { GroupsAnalytics } from "@/components/analytics/GroupsAnalytics";
 import { LeadsManagement } from "@/components/analytics/LeadsManagement";
 import { AdminLogsTable } from "@/components/analytics/AdminLogsTable";
+import { UsersManagement } from "@/components/analytics/UsersManagement";
 
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
@@ -112,10 +113,11 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-              <TabsTrigger value="leads">Gestão de Leads</TabsTrigger>
-              <TabsTrigger value="logs">Logs de Ações</TabsTrigger>
+              <TabsTrigger value="users">Usuários</TabsTrigger>
+              <TabsTrigger value="leads">Leads</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6 mt-6">
@@ -150,6 +152,20 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <UsersAnalytics />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="users" className="mt-6">
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Gestão de Usuários</CardTitle>
+                  <CardDescription>
+                    Visualize e gerencie todos os usuários da plataforma
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <UsersManagement />
                 </CardContent>
               </Card>
             </TabsContent>

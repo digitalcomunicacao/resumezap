@@ -43,17 +43,42 @@ export default function GroupsListModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [planLimit, setPlanLimit] = useState(PLAN_LIMITS[userPlan] || 1);
   const { toast } = useToast();
 
-  const planLimit = PLAN_LIMITS[userPlan] || 1;
   const selectedCount = groups.filter(g => g.is_selected).length;
   const limitReached = selectedCount >= planLimit;
 
   useEffect(() => {
     if (open) {
+      fetchUserProfile();
       fetchGroups();
     }
   }, [open]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('manual_groups_limit, subscription_plan')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        // Prioriza o limite manual se existir
+        if (profile.manual_groups_limit !== null) {
+          setPlanLimit(profile.manual_groups_limit);
+        } else {
+          setPlanLimit(PLAN_LIMITS[profile.subscription_plan] || 1);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
 
   const fetchGroups = async () => {
     setLoading(true);
