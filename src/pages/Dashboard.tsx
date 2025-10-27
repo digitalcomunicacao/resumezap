@@ -13,6 +13,7 @@ import { SummariesList } from "@/components/SummariesList";
 import { useSubscription, STRIPE_PLANS } from "@/contexts/SubscriptionContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { PricingModal } from "@/components/PricingModal";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -21,6 +22,7 @@ const Dashboard = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
   const [generatingSummaries, setGeneratingSummaries] = useState(false);
   const { subscriptionPlan, subscriptionEnd, groupsLimit, openCustomerPortal } = useSubscription();
@@ -300,18 +302,12 @@ const Dashboard = () => {
                     Gerenciar Assinatura
                   </Button>
                 ) : (
-          <Button 
-            className="w-full" 
-            onClick={() => {
-              navigate('/');
-              setTimeout(() => {
-                const element = document.getElementById('pricing');
-                element?.scrollIntoView({ behavior: 'smooth' });
-              }, 100);
-            }}
-          >
-            Fazer Upgrade
-          </Button>
+                  <Button 
+                    className="w-full" 
+                    onClick={() => setShowPricingModal(true)}
+                  >
+                    Fazer Upgrade
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -343,6 +339,8 @@ const Dashboard = () => {
           setProfile(profileData);
         }}
       />
+
+      <PricingModal open={showPricingModal} onOpenChange={setShowPricingModal} />
     </div>
   );
 };
