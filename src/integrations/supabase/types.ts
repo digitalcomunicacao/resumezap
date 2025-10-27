@@ -20,6 +20,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          preferred_summary_time: string | null
           selected_groups_count: number | null
           stripe_customer_id: string | null
           stripe_product_id: string | null
@@ -36,6 +37,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          preferred_summary_time?: string | null
           selected_groups_count?: number | null
           stripe_customer_id?: string | null
           stripe_product_id?: string | null
@@ -52,6 +54,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          preferred_summary_time?: string | null
           selected_groups_count?: number | null
           stripe_customer_id?: string | null
           stripe_product_id?: string | null

@@ -14,6 +14,7 @@ import { useSubscription, STRIPE_PLANS } from "@/contexts/SubscriptionContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PricingModal } from "@/components/PricingModal";
+import { SummarySettings } from "@/components/SummarySettings";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -311,6 +312,11 @@ const Dashboard = () => {
                 )}
               </CardContent>
             </Card>
+
+            <SummarySettings 
+              userId={user?.id || ''} 
+              currentTime={profile?.preferred_summary_time || "09:00:00"} 
+            />
           </div>
 
           <div className="mt-8">

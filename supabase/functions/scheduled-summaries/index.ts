@@ -27,26 +27,35 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Buscar todos os usuários que têm conexões ativas do WhatsApp
-    const { data: connections, error: connectionsError } = await supabase
-      .from('whatsapp_connections')
-      .select('user_id, instance_name')
-      .eq('status', 'connected');
+    // Obter hora atual em Brasília (GMT-3)
+    const now = new Date();
+    const currentHour = now.getUTCHours() - 3; // Ajustar para GMT-3
+    const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour;
+    const timeToMatch = `${adjustedHour.toString().padStart(2, '0')}:00:00`;
 
-    if (connectionsError) {
-      logStep("Error fetching connections", { error: connectionsError });
-      throw connectionsError;
+    logStep("Checking for users with preferred time", { currentHour: adjustedHour, timeToMatch });
+
+    // Buscar perfis de usuários cujo horário preferido corresponde à hora atual
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, preferred_summary_time')
+      .eq('preferred_summary_time', timeToMatch);
+
+    if (profilesError) {
+      logStep("Error fetching profiles", { error: profilesError });
+      throw profilesError;
     }
 
-    logStep("Active connections found", { count: connections?.length || 0 });
+    logStep("Profiles found with matching time", { count: profiles?.length || 0 });
 
-    if (!connections || connections.length === 0) {
-      logStep("No active connections to process");
+    if (!profiles || profiles.length === 0) {
+      logStep("No users with preferred time matching current hour");
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'No active connections to process',
-          processed: 0
+          message: `No users scheduled for ${timeToMatch}`,
+          processed: 0,
+          currentHour: adjustedHour
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -57,20 +66,50 @@ serve(async (req) => {
     const results = [];
 
     // Processar cada usuário
-    for (const connection of connections) {
+    for (const profile of profiles) {
       try {
-        logStep("Processing user", { userId: connection.user_id });
+        // Verificar se o usuário tem conexão ativa do WhatsApp
+        const { data: connection, error: connectionError } = await supabase
+          .from('whatsapp_connections')
+          .select('instance_name')
+          .eq('user_id', profile.id)
+          .eq('status', 'connected')
+          .maybeSingle();
+
+        if (connectionError) {
+          logStep("Error fetching connection", { userId: profile.id, error: connectionError });
+          errorCount++;
+          results.push({
+            userId: profile.id,
+            success: false,
+            error: 'Error fetching connection'
+          });
+          continue;
+        }
+
+        if (!connection) {
+          logStep("User has no active connection", { userId: profile.id });
+          errorCount++;
+          results.push({
+            userId: profile.id,
+            success: false,
+            error: 'No active connection'
+          });
+          continue;
+        }
+
+        logStep("Processing user", { userId: profile.id });
 
         // Buscar o usuário
         const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(
-          connection.user_id
+          profile.id
         );
 
         if (userError || !user) {
-          logStep("Error fetching user", { userId: connection.user_id, error: userError });
+          logStep("Error fetching user", { userId: profile.id, error: userError });
           errorCount++;
           results.push({
-            userId: connection.user_id,
+            userId: profile.id,
             success: false,
             error: 'User not found'
           });
@@ -86,7 +125,7 @@ serve(async (req) => {
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${supabaseServiceKey}`,
-              'x-user-id': connection.user_id // Pass user ID via custom header
+              'x-user-id': profile.id // Pass user ID via custom header
             }
           }
         );
@@ -95,29 +134,29 @@ serve(async (req) => {
 
         if (!response.ok || summaryData.error) {
           logStep("Error generating summaries", { 
-            userId: connection.user_id, 
+            userId: profile.id, 
             error: summaryData.error || `HTTP ${response.status}` 
           });
           errorCount++;
           results.push({
-            userId: connection.user_id,
+            userId: profile.id,
             success: false,
             error: summaryData.error || 'Failed to generate summaries'
           });
         } else {
-          logStep("Summaries generated successfully", { userId: connection.user_id, data: summaryData });
+          logStep("Summaries generated successfully", { userId: profile.id, data: summaryData });
           successCount++;
           results.push({
-            userId: connection.user_id,
+            userId: profile.id,
             success: true,
             summariesCount: summaryData?.summaries?.length || 0
           });
         }
       } catch (userError) {
-        logStep("Unexpected error processing user", { userId: connection.user_id, error: userError });
+        logStep("Unexpected error processing user", { userId: profile.id, error: userError });
         errorCount++;
         results.push({
-          userId: connection.user_id,
+          userId: profile.id,
           success: false,
           error: userError instanceof Error ? userError.message : 'Unknown error'
         });
@@ -125,7 +164,7 @@ serve(async (req) => {
     }
 
     logStep("Cron job completed", { 
-      total: connections.length, 
+      total: profiles.length, 
       success: successCount, 
       errors: errorCount 
     });
@@ -133,7 +172,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${connections.length} users`,
+        message: `Processed ${profiles.length} users at ${timeToMatch}`,
+        currentHour: adjustedHour,
         successCount,
         errorCount,
         results
