@@ -56,6 +56,13 @@ serve(async (req) => {
     console.log('Creating Evolution API instance:', instanceName);
 
     // Create instance in Evolution API
+    console.log('Evolution API URL:', evolutionApiUrl);
+    console.log('Creating instance with payload:', {
+      instanceName,
+      integration: 'WHATSAPP-BAILEYS',
+      qrcode: true
+    });
+
     const createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
       method: 'POST',
       headers: {
@@ -64,16 +71,43 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         instanceName: instanceName,
-        token: evolutionApiKey,
+        integration: 'WHATSAPP-BAILEYS',
         qrcode: true,
       }),
     });
 
     if (!createInstanceResponse.ok) {
       const errorText = await createInstanceResponse.text();
-      console.error('Evolution API create instance error:', errorText);
+      let errorData;
+      
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText };
+      }
+
+      console.error('Evolution API Error Details:', {
+        status: createInstanceResponse.status,
+        statusText: createInstanceResponse.statusText,
+        body: errorData,
+        url: `${evolutionApiUrl}/instance/create`,
+      });
+
+      let userMessage = 'Erro ao criar instância WhatsApp';
+      
+      if (errorData.response?.message?.includes('Invalid integration')) {
+        userMessage = 'Erro de configuração da API Evolution. Verifique as credenciais.';
+      } else if (createInstanceResponse.status === 401) {
+        userMessage = 'API Key da Evolution API inválida';
+      } else if (createInstanceResponse.status === 404) {
+        userMessage = 'Endpoint da Evolution API não encontrado. Verifique a URL.';
+      }
+
       return new Response(
-        JSON.stringify({ error: 'Erro ao criar instância WhatsApp' }),
+        JSON.stringify({ 
+          error: userMessage,
+          details: errorData
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
