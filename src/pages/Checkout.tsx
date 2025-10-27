@@ -119,7 +119,12 @@ const Checkout = () => {
         throw new Error('Stripe.js não foi carregado');
       }
 
-      const stripe = window.Stripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        throw new Error('Chave pública do Stripe não configurada. Configure VITE_STRIPE_PUBLISHABLE_KEY');
+      }
+
+      const stripe = window.Stripe(publishableKey);
       
       const checkout = await stripe.initEmbeddedCheckout({
         clientSecret: secret,
