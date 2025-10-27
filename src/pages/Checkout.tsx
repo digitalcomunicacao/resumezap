@@ -139,10 +139,10 @@ const Checkout = () => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-5 gap-8 max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-5 gap-6 max-w-7xl mx-auto">
           {/* Left Side - Plan Benefits */}
-          <div className="lg:col-span-2">
-            <div className="sticky top-24 space-y-6">
+          <div className="lg:col-span-2 order-2 lg:order-1">
+            <div className="lg:sticky lg:top-24 space-y-5">
               {/* Plan Badge */}
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full">
                 <Crown className="w-5 h-5 text-primary" />
@@ -192,12 +192,12 @@ const Checkout = () => {
           </div>
 
           {/* Right Side - Checkout Form */}
-          <div className="lg:col-span-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>Finalizar Assinatura</CardTitle>
+          <div className="lg:col-span-3 order-1 lg:order-2">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl">Finalizar Assinatura</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-6 pb-6">
                 {loading && (
                   <div className="flex flex-col items-center justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
@@ -220,12 +220,33 @@ const Checkout = () => {
                       appearance: {
                         theme: 'stripe',
                         variables: {
-                          colorPrimary: 'hsl(142 70% 49%)',
-                          colorBackground: 'hsl(var(--background))',
-                          colorText: 'hsl(var(--foreground))',
-                          colorDanger: 'hsl(var(--destructive))',
-                          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                          borderRadius: '1rem',
+                          colorPrimary: '#22c55e',
+                          colorBackground: '#ffffff',
+                          colorText: '#0a0a0a',
+                          colorDanger: '#ef4444',
+                          fontFamily: 'Inter, system-ui, sans-serif',
+                          fontSizeBase: '15px',
+                          spacingUnit: '4px',
+                          borderRadius: '8px',
+                          fontWeightNormal: '400',
+                          fontWeightMedium: '500',
+                          fontWeightBold: '600',
+                        },
+                        rules: {
+                          '.Input': {
+                            padding: '12px',
+                            fontSize: '15px',
+                            lineHeight: '1.5',
+                          },
+                          '.Label': {
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            marginBottom: '6px',
+                          },
+                          '.Tab': {
+                            padding: '12px 16px',
+                            fontSize: '15px',
+                          },
                         },
                       },
                     }}

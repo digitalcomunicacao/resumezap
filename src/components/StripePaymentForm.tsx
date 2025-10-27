@@ -46,11 +46,23 @@ export const StripePaymentForm = ({ planKey }: StripePaymentFormProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="min-h-[300px]">
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
         <PaymentElement 
           options={{
-            layout: "tabs",
+            layout: {
+              type: 'accordion',
+              defaultCollapsed: false,
+              radios: false,
+              spacedAccordionItems: false
+            },
+            fields: {
+              billingDetails: {
+                address: {
+                  country: 'auto'
+                }
+              }
+            },
             paymentMethodOrder: ['card'],
           }}
         />
@@ -62,23 +74,25 @@ export const StripePaymentForm = ({ planKey }: StripePaymentFormProps) => {
         </Alert>
       )}
 
-      <Button 
-        type="submit" 
-        disabled={!stripe || loading}
-        className="w-full h-12 text-base font-semibold"
-        size="lg"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Processando...
-          </>
-        ) : (
-          'Confirmar Assinatura'
-        )}
-      </Button>
+      <div className="pt-2">
+        <Button 
+          type="submit" 
+          disabled={!stripe || loading}
+          className="w-full h-12 text-base font-semibold"
+          size="lg"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Processando...
+            </>
+          ) : (
+            'Confirmar Assinatura'
+          )}
+        </Button>
+      </div>
 
-      <p className="text-sm text-muted-foreground text-center">
+      <p className="text-xs text-muted-foreground text-center pt-1">
         Ao confirmar, você concorda com nossos termos de serviço e política de privacidade
       </p>
     </form>
