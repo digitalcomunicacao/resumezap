@@ -97,14 +97,25 @@ serve(async (req) => {
         }
 
         const messagesData = await messagesResponse.json();
-        const messages = messagesData || [];
+        
+        // Extract messages array from response (handle different API response formats)
+        let messages = [];
+        if (Array.isArray(messagesData)) {
+          messages = messagesData;
+        } else if (messagesData?.data && Array.isArray(messagesData.data)) {
+          messages = messagesData.data;
+        } else if (messagesData?.messages && Array.isArray(messagesData.messages)) {
+          messages = messagesData.messages;
+        }
 
-        if (messages.length === 0) {
+        console.log(`Found ${typeof messages} messages for ${group.group_name}`, messages.length);
+
+        if (!Array.isArray(messages) || messages.length === 0) {
           console.log(`No messages found for group ${group.group_name}`);
           continue;
         }
 
-        console.log(`Found ${messages.length} messages for ${group.group_name}`);
+        console.log(`Processing ${messages.length} messages for ${group.group_name}`);
 
         // Format messages for AI
         const formattedMessages = messages
