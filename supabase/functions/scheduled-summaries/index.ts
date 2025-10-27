@@ -40,7 +40,7 @@ serve(async (req) => {
       currentTimeString 
     });
 
-    // Buscar usuários com conexão ativa do WhatsApp
+    // Buscar usuários com conexão WhatsApp ativa
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select(`
@@ -71,7 +71,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `No users scheduled for ${currentTimeString} (Brasília GMT-3)`,
+          message: `No users scheduled for ${currentTimeString} (Brasília)`,
+          brasiliaHour,
+          utcHour,
           processed: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -259,7 +261,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Processed ${usersToProcess.length} users for hour ${currentTimeString} (Brasília GMT-3)`,
+        message: `Processed ${usersToProcess.length} users for hour ${currentTimeString} (Brasília)`,
         brasiliaHour,
         utcHour,
         successCount,
