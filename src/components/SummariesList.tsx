@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles, Download, AlertCircle } from "lucide-react";
+import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles, Download, AlertCircle, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,7 @@ interface Summary {
   summary_date: string;
   message_count: number;
   created_at: string;
+  delivery_status?: string | null;
 }
 
 interface SummariesListProps {
@@ -32,6 +33,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set());
   const [dailyUsage, setDailyUsage] = useState(0);
+  const [sendingStates, setSendingStates] = useState<Record<string, boolean>>({});
   const { subscriptionPlan } = useSubscription();
 
   // Rate limits por plano
@@ -49,13 +51,23 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     try {
       const { data, error } = await supabase
         .from("summaries")
-        .select("*")
+        .select(`
+          *,
+          summary_deliveries!left(status)
+        `)
         .eq("user_id", userId)
         .order("summary_date", { ascending: false })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setSummaries(data || []);
+      
+      // Map delivery status to summaries
+      const summariesWithStatus = (data || []).map((summary: any) => ({
+        ...summary,
+        delivery_status: summary.summary_deliveries?.[0]?.status || null
+      }));
+      
+      setSummaries(summariesWithStatus);
     } catch (error) {
       console.error("Error fetching summaries:", error);
       toast.error("Erro ao carregar resumos");
@@ -145,6 +157,40 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     }
   };
 
+  const handleSendToWhatsApp = async (summaryId: string) => {
+    setSendingStates(prev => ({ ...prev, [summaryId]: true }));
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast.error("Você precisa estar logado");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('manual-send-summary', {
+        body: { summaryId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("Resumo enviado para o WhatsApp!");
+        await fetchSummaries(); // Refresh to get updated delivery status
+      } else {
+        throw new Error(data.error || 'Falha ao enviar');
+      }
+    } catch (error: any) {
+      console.error("Error sending summary:", error);
+      toast.error(error.message || "Erro ao enviar resumo");
+    } finally {
+      setSendingStates(prev => ({ ...prev, [summaryId]: false }));
+    }
+  };
+
   const toggleExpand = (summaryId: string) => {
     setExpandedSummaries(prev => {
       const newSet = new Set(prev);
@@ -155,6 +201,37 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
       }
       return newSet;
     });
+  };
+
+  const getDeliveryStatusBadge = (status: string | null | undefined) => {
+    if (!status) {
+      return (
+        <Badge variant="outline" className="gap-1">
+          <Clock className="w-3 h-3" />
+          Pendente
+        </Badge>
+      );
+    }
+
+    if (status === 'sent') {
+      return (
+        <Badge variant="default" className="gap-1 bg-green-500">
+          <CheckCircle className="w-3 h-3" />
+          Enviado
+        </Badge>
+      );
+    }
+
+    if (status === 'failed') {
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <XCircle className="w-3 h-3" />
+          Falhou
+        </Badge>
+      );
+    }
+
+    return null;
   };
 
   const filteredSummaries = summaries.filter(summary => {
@@ -275,24 +352,46 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
                   const isExpanded = expandedSummaries.has(summary.id);
                   const textPreview = summary.summary_text.slice(0, 200);
                   const shouldShowExpand = summary.summary_text.length > 200;
+                  const isSending = sendingStates[summary.id] || false;
 
                   return (
                     <Card key={summary.id} className="shadow-soft hover:shadow-hover transition-shadow">
                       <CardHeader className="pb-3">
-                        <div className="flex items-start gap-3">
-                          <Avatar className="w-10 h-10">
-                            <AvatarFallback className="bg-primary/10 text-primary">
-                              {summary.group_name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base mb-1">
-                              {summary.group_name}
-                            </CardTitle>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <MessageSquare className="w-3 h-3" />
-                              {summary.message_count} mensagens
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 flex-1">
+                            <Avatar className="w-10 h-10">
+                              <AvatarFallback className="bg-primary/10 text-primary">
+                                {summary.group_name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <CardTitle className="text-base mb-1">
+                                {summary.group_name}
+                              </CardTitle>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <MessageSquare className="w-3 h-3" />
+                                {summary.message_count} mensagens
+                              </div>
                             </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getDeliveryStatusBadge(summary.delivery_status)}
+                            {(!summary.delivery_status || summary.delivery_status === 'failed') && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSendToWhatsApp(summary.id)}
+                                disabled={isSending}
+                                className="gap-1"
+                              >
+                                {isSending ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3" />
+                                )}
+                                {isSending ? 'Enviando...' : 'Enviar'}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardHeader>
