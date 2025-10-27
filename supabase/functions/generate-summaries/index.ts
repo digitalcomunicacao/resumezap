@@ -228,8 +228,19 @@ serve(async (req) => {
           .map((msg: any) => {
             const text = extractTextContent(msg);
             if (!text) return null;
-            const sender = msg.pushName || 'Anônimo';
-            return `${sender}: ${text}`;
+            
+            const sender = msg.pushName || msg.key?.participant?.split('@')[0] || 'Anônimo';
+            const timestamp = msg.messageTimestamp;
+            const date = new Date(parseInt(timestamp) * (timestamp.toString().length === 10 ? 1000 : 1));
+            const formattedDate = date.toLocaleString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+            
+            return `[${formattedDate}] ${sender}: ${text}`;
           })
           .filter(Boolean)
           .join('\n');
@@ -250,47 +261,90 @@ serve(async (req) => {
         console.log(`Found ${textMessageCount} text messages from ${messages.length} total messages`);
 
         // Determine AI model based on plan
-        const aiModel = (userPlan === 'pro' || userPlan === 'premium') 
+        const aiModel = (userPlan === 'enterprise' || userPlan === 'pro' || userPlan === 'premium') 
           ? 'google/gemini-2.5-pro' 
           : 'google/gemini-2.5-flash';
 
         // Build system prompt based on preferences
-        let systemPrompt = 'Você é um assistente especializado em criar resumos de conversas do WhatsApp.';
+        let systemPrompt = '';
+        let userPrompt = '';
         
         const tone = preferences?.tone || 'professional';
         const size = preferences?.size || 'medium';
         const thematicFocus = preferences?.thematic_focus;
         const includeSentiment = preferences?.include_sentiment_analysis || false;
 
-        // Tone customization
-        const toneInstructions = {
-          professional: 'Mantenha um tom profissional e objetivo.',
-          casual: 'Use um tom casual e descontraído.',
-          formal: 'Mantenha um tom formal e elegante.',
-          friendly: 'Use um tom amigável e acolhedor.',
-        };
-        systemPrompt += ` ${toneInstructions[tone as keyof typeof toneInstructions] || toneInstructions.professional}`;
+        // Sistema prompt específico para Enterprise
+        if (userPlan === 'enterprise') {
+          systemPrompt = `Você é um assistente especializado em análise detalhada de conversas do WhatsApp para empresas.
+  
+INSTRUÇÕES ESPECÍFICAS ENTERPRISE:
+- Identifique TODOS os participantes que falaram
+- Mantenha referências temporais precisas (use os timestamps fornecidos)
+- Destaque mensagens-chave com data/hora
+- Identifique padrões de horário (ex: "Discussão principal às 14h30")
+- Liste decisões tomadas com timestamps
+- Identifique perguntas não respondidas
+- Analise a sequência temporal das conversas
+- Inclua estatísticas de participação por usuário
 
-        // Size customization
-        const sizeInstructions = {
-          short: 'Crie um resumo bem curto, com no máximo 3 pontos principais.',
-          medium: 'Crie um resumo médio, com 4-6 pontos principais.',
-          long: 'Crie um resumo detalhado, com 7-10 pontos principais.',
-          detailed: 'Crie um resumo muito detalhado, cobrindo todos os aspectos importantes.',
-        };
-        systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
+FORMATO DO RESUMO:
+📊 Estatísticas:
+- Total de mensagens
+- Participantes ativos
+- Horário de pico
 
-        // Thematic focus
-        if (thematicFocus) {
-          systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
+⏱️ Cronologia Principal:
+- [HH:MM] Ponto importante 1
+- [HH:MM] Ponto importante 2
+
+👥 Participação:
+- Usuário X: principais contribuições
+- Usuário Y: principais contribuições
+
+💬 Tópicos Discutidos:
+- Tópico 1 (com timestamps relevantes)
+- Tópico 2 (com timestamps relevantes)
+
+⚠️ Pendências:
+- Itens que requerem atenção`;
+
+          userPrompt = `Analise a conversa abaixo do grupo "${group.group_name}" e forneça um resumo estruturado seguindo o formato especificado:\n\n${formattedMessages}`;
+        } else {
+          // Manter lógica atual para outros planos
+          systemPrompt = 'Você é um assistente especializado em criar resumos de conversas do WhatsApp.';
+          
+          // Tone customization
+          const toneInstructions = {
+            professional: 'Mantenha um tom profissional e objetivo.',
+            casual: 'Use um tom casual e descontraído.',
+            formal: 'Mantenha um tom formal e elegante.',
+            friendly: 'Use um tom amigável e acolhedor.',
+          };
+          systemPrompt += ` ${toneInstructions[tone as keyof typeof toneInstructions] || toneInstructions.professional}`;
+
+          // Size customization
+          const sizeInstructions = {
+            short: 'Crie um resumo bem curto, com no máximo 3 pontos principais.',
+            medium: 'Crie um resumo médio, com 4-6 pontos principais.',
+            long: 'Crie um resumo detalhado, com 7-10 pontos principais.',
+            detailed: 'Crie um resumo muito detalhado, cobrindo todos os aspectos importantes.',
+          };
+          systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
+
+          // Thematic focus
+          if (thematicFocus) {
+            systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
+          }
+
+          // Sentiment analysis
+          if (includeSentiment) {
+            systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
+          }
+
+          systemPrompt += ' Organize em bullet points em português brasileiro.';
+          userPrompt = `Resuma as mensagens abaixo do grupo "${group.group_name}":\n\n${formattedMessages}`;
         }
-
-        // Sentiment analysis
-        if (includeSentiment) {
-          systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
-        }
-
-        systemPrompt += ' Organize em bullet points em português brasileiro.';
 
         // Generate summary using Lovable AI
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -308,7 +362,7 @@ serve(async (req) => {
               },
               {
                 role: 'user',
-                content: `Resuma as mensagens abaixo do grupo "${group.group_name}":\n\n${formattedMessages}`
+                content: userPrompt
               }
             ],
           }),

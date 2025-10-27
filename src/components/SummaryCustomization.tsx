@@ -23,9 +23,11 @@ export const SummaryCustomization = ({ userId }: SummaryCustomizationProps) => {
   const [thematicFocus, setThematicFocus] = useState<string>("");
   const [includeSentiment, setIncludeSentiment] = useState(false);
   const [enableAlerts, setEnableAlerts] = useState(false);
+  const [enterpriseDetailLevel, setEnterpriseDetailLevel] = useState<string>("full");
 
-  const isBasicOrHigher = ['basic', 'pro', 'premium'].includes(subscriptionPlan);
-  const isProOrHigher = ['pro', 'premium'].includes(subscriptionPlan);
+  const isBasicOrHigher = ['basic', 'pro', 'premium', 'enterprise'].includes(subscriptionPlan);
+  const isProOrHigher = ['pro', 'premium', 'enterprise'].includes(subscriptionPlan);
+  const isEnterprise = subscriptionPlan === 'enterprise';
 
   useEffect(() => {
     const fetchPreferences = async () => {
@@ -41,6 +43,7 @@ export const SummaryCustomization = ({ userId }: SummaryCustomizationProps) => {
         setThematicFocus(data.thematic_focus || '');
         setIncludeSentiment(data.include_sentiment_analysis || false);
         setEnableAlerts(data.enable_smart_alerts || false);
+        setEnterpriseDetailLevel(data.enterprise_detail_level || 'full');
       }
     };
 
@@ -59,6 +62,7 @@ export const SummaryCustomization = ({ userId }: SummaryCustomizationProps) => {
           thematic_focus: thematicFocus,
           include_sentiment_analysis: includeSentiment,
           enable_smart_alerts: enableAlerts,
+          enterprise_detail_level: enterpriseDetailLevel,
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
@@ -196,6 +200,25 @@ export const SummaryCustomization = ({ userId }: SummaryCustomizationProps) => {
             />
           </div>
         </div>
+
+        {isEnterprise && (
+          <div className="space-y-2">
+            <Label htmlFor="detail-level">Nível de Detalhamento Enterprise</Label>
+            <Select value={enterpriseDetailLevel} onValueChange={setEnterpriseDetailLevel}>
+              <SelectTrigger id="detail-level">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full">Completo (padrão)</SelectItem>
+                <SelectItem value="ultra">Ultra-detalhado</SelectItem>
+                <SelectItem value="audit">Auditoria (máximo detalhe)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Controle o nível de detalhamento dos resumos Enterprise
+            </p>
+          </div>
+        )}
 
         <Button onClick={handleSave} disabled={loading} className="w-full">
           {loading ? "Salvando..." : "Salvar Preferências"}

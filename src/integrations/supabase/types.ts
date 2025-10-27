@@ -411,6 +411,7 @@ export type Database = {
         Row: {
           created_at: string | null
           enable_smart_alerts: boolean | null
+          enterprise_detail_level: string | null
           id: string
           include_sentiment_analysis: boolean | null
           size: string | null
@@ -422,6 +423,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           enable_smart_alerts?: boolean | null
+          enterprise_detail_level?: string | null
           id?: string
           include_sentiment_analysis?: boolean | null
           size?: string | null
@@ -433,6 +435,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           enable_smart_alerts?: boolean | null
+          enterprise_detail_level?: string | null
           id?: string
           include_sentiment_analysis?: boolean | null
           size?: string | null
