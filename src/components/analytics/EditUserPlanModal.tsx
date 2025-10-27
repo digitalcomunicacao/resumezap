@@ -57,6 +57,9 @@ export function EditUserPlanModal({ user, onClose }: EditUserPlanModalProps) {
         updateData.subscription_end_date = null;
       }
 
+      // Mark as manual subscription
+      updateData.manual_subscription = true;
+
       const { error: updateError } = await supabase
         .from("profiles")
         .update(updateData)

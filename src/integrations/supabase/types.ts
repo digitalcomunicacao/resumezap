@@ -194,6 +194,7 @@ export type Database = {
           id: string
           last_seen_at: string | null
           manual_groups_limit: number | null
+          manual_subscription: boolean | null
           preferred_summary_time: string | null
           selected_groups_count: number | null
           send_summary_to_group: boolean | null
@@ -217,6 +218,7 @@ export type Database = {
           id: string
           last_seen_at?: string | null
           manual_groups_limit?: number | null
+          manual_subscription?: boolean | null
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
           send_summary_to_group?: boolean | null
@@ -240,6 +242,7 @@ export type Database = {
           id?: string
           last_seen_at?: string | null
           manual_groups_limit?: number | null
+          manual_subscription?: boolean | null
           preferred_summary_time?: string | null
           selected_groups_count?: number | null
           send_summary_to_group?: boolean | null

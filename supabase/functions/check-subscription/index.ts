@@ -43,6 +43,66 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
+    // Check for manual subscription override
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('subscription_plan, subscription_end_date, manual_subscription')
+      .eq('id', user.id)
+      .maybeSingle();
+    
+    logStep("Profile data retrieved", { profile });
+
+    // If manual subscription is active and not expired, use it
+    if (profile?.manual_subscription && profile.subscription_plan !== 'free') {
+      const endDate = profile.subscription_end_date ? new Date(profile.subscription_end_date) : null;
+      const isExpired = endDate && endDate < new Date();
+      
+      logStep("Manual subscription check", { 
+        hasEndDate: !!endDate, 
+        isExpired, 
+        plan: profile.subscription_plan 
+      });
+
+      // If expired, revert to free plan
+      if (isExpired) {
+        logStep("Manual subscription expired, reverting to free");
+        await supabaseClient
+          .from('profiles')
+          .update({
+            subscription_plan: 'free',
+            manual_subscription: false,
+            subscription_end_date: null
+          })
+          .eq('id', user.id);
+        
+        return new Response(JSON.stringify({ 
+          subscribed: false,
+          product_id: null,
+          subscription_end: null,
+          subscription_plan: 'free'
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Manual subscription is active, return it
+      if (!isExpired || !endDate) {
+        logStep("Using manual subscription", { plan: profile.subscription_plan });
+        return new Response(JSON.stringify({
+          subscribed: profile.subscription_plan !== 'free',
+          product_id: null,
+          subscription_end: profile.subscription_end_date,
+          subscription_plan: profile.subscription_plan,
+          manual_override: true
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    }
+
+    // If no manual override, check Stripe
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
