@@ -99,3 +99,18 @@ All colors MUST be HSL.
     background-size: 40px 40px;
   }
 }
+
+@layer utilities {
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 3s infinite;
+  }
+}

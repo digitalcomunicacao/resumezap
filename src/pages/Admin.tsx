@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { OverviewMetrics } from "@/components/analytics/OverviewMetrics";
+import { FunnelMetrics } from "@/components/analytics/FunnelMetrics";
 import { UsageMetrics } from "@/components/analytics/UsageMetrics";
 import { SummariesAnalytics } from "@/components/analytics/SummariesAnalytics";
 import { GroupsAnalytics } from "@/components/analytics/GroupsAnalytics";
@@ -124,6 +125,7 @@ const Admin = () => {
 
             <TabsContent value="overview" className="space-y-6 mt-6">
               <OverviewMetrics />
+              <FunnelMetrics />
             </TabsContent>
 
             <TabsContent value="usage" className="space-y-6 mt-6">
