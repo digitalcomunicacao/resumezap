@@ -316,21 +316,21 @@ const Dashboard = () => {
             </Card>
 
             <Card className="shadow-soft border-primary/20">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
                   {subscriptionPlan !== 'free' ? (
                     <>
-                      <Crown className="w-5 h-5 text-primary" />
+                      <Crown className="w-4 h-4 text-primary" />
                       Plano {STRIPE_PLANS[subscriptionPlan].name}
                     </>
                   ) : (
                     <>
-                      <CreditCard className="w-5 h-5 text-muted-foreground" />
+                      <CreditCard className="w-4 h-4 text-muted-foreground" />
                       Plano Free
                     </>
                   )}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   {subscriptionPlan !== 'free' ? (
                     <>
                       {groupsLimit} grupos • 
@@ -341,7 +341,7 @@ const Dashboard = () => {
                   )}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="pt-0 pb-4">
                 {subscriptionPlan !== 'free' ? (
                   profile?.manual_subscription ? (
                     <Button 
