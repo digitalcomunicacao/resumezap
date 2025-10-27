@@ -24,6 +24,8 @@ interface Lead {
     full_name: string;
     email: string;
     subscription_plan: string;
+    subscription_end_date: string | null;
+    manual_subscription: boolean;
     selected_groups_count: number;
     manual_groups_limit: number | null;
   };
@@ -35,6 +37,7 @@ export const LeadsManagement = () => {
   const [search, setSearch] = useState("");
   const [professionFilter, setProfessionFilter] = useState<string>("all");
   const [scoreFilter, setScoreFilter] = useState<string>("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export const LeadsManagement = () => {
       // Fetch profiles separately
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, subscription_plan, selected_groups_count, manual_groups_limit");
+        .select("id, full_name, email, subscription_plan, subscription_end_date, manual_subscription, selected_groups_count, manual_groups_limit");
 
       if (profilesError) throw profilesError;
 
@@ -71,6 +74,8 @@ export const LeadsManagement = () => {
             full_name: "Nome não encontrado",
             email: "Email não encontrado",
             subscription_plan: "free",
+            subscription_end_date: null,
+            manual_subscription: false,
             selected_groups_count: 0,
             manual_groups_limit: null,
           },
@@ -132,6 +137,24 @@ export const LeadsManagement = () => {
     return labels[employees] || employees;
   };
 
+  const getTrialStatusBadge = (lead: Lead) => {
+    if (!lead.profiles.manual_subscription) return null;
+    
+    if (!lead.profiles.subscription_end_date) {
+      return <Badge className="bg-blue-500">Trial Permanente</Badge>;
+    }
+    
+    const now = new Date();
+    const endDate = new Date(lead.profiles.subscription_end_date);
+    const isExpired = endDate <= now;
+    
+    return isExpired ? (
+      <Badge variant="destructive">Trial Expirado</Badge>
+    ) : (
+      <Badge className="bg-yellow-500">Trial Ativo</Badge>
+    );
+  };
+
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
       lead.profiles.full_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -147,7 +170,10 @@ export const LeadsManagement = () => {
       (scoreFilter === "cold" && lead.lead_score >= 30 && lead.lead_score < 60) ||
       (scoreFilter === "inactive" && lead.lead_score < 30);
 
-    return matchesSearch && matchesProfession && matchesScore;
+    const matchesPlan =
+      planFilter === "all" || lead.profiles.subscription_plan === planFilter;
+
+    return matchesSearch && matchesProfession && matchesScore && matchesPlan;
   });
 
   if (loading) {
@@ -194,6 +220,19 @@ export const LeadsManagement = () => {
             <SelectItem value="inactive">💤 Inativo (0-29)</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={planFilter} onValueChange={setPlanFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrar por plano" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os planos</SelectItem>
+            <SelectItem value="free">Free</SelectItem>
+            <SelectItem value="basic">Basic</SelectItem>
+            <SelectItem value="pro">Pro</SelectItem>
+            <SelectItem value="premium">Premium</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border">
@@ -209,6 +248,7 @@ export const LeadsManagement = () => {
               <TableHead>Faturamento</TableHead>
               <TableHead>Funcionários</TableHead>
               <TableHead>Plano</TableHead>
+              <TableHead>Status Trial</TableHead>
               <TableHead>Grupos</TableHead>
               <TableHead>Ações</TableHead>
             </TableRow>
@@ -256,6 +296,7 @@ export const LeadsManagement = () => {
                   <TableCell>
                     <Badge variant="outline">{lead.profiles.subscription_plan}</Badge>
                   </TableCell>
+                  <TableCell>{getTrialStatusBadge(lead)}</TableCell>
                   <TableCell>
                     {lead.profiles.manual_groups_limit !== null ? (
                       <Badge variant="secondary">{lead.profiles.manual_groups_limit} (manual)</Badge>

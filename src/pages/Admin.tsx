@@ -8,9 +8,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { OverviewMetrics } from "@/components/analytics/OverviewMetrics";
-import { UsersAnalytics } from "@/components/analytics/UsersAnalytics";
+import { UsageMetrics } from "@/components/analytics/UsageMetrics";
 import { SummariesAnalytics } from "@/components/analytics/SummariesAnalytics";
 import { GroupsAnalytics } from "@/components/analytics/GroupsAnalytics";
+import { ErrorLogsTable } from "@/components/analytics/ErrorLogsTable";
 import { LeadsManagement } from "@/components/analytics/LeadsManagement";
 import { AdminLogsTable } from "@/components/analytics/AdminLogsTable";
 import { UsersManagement } from "@/components/analytics/UsersManagement";
@@ -113,8 +114,9 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+              <TabsTrigger value="usage">Uso</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="logs">Logs</TabsTrigger>
@@ -122,12 +124,16 @@ const Admin = () => {
 
             <TabsContent value="overview" className="space-y-6 mt-6">
               <OverviewMetrics />
+            </TabsContent>
+
+            <TabsContent value="usage" className="space-y-6 mt-6">
+              <UsageMetrics />
 
               <div className="grid gap-6 md:grid-cols-2">
                 <Card className="shadow-soft">
                   <CardHeader>
-                    <CardTitle>Resumos</CardTitle>
-                    <CardDescription>Estatísticas de geração de resumos</CardDescription>
+                    <CardTitle>Resumos Diários</CardTitle>
+                    <CardDescription>Estatísticas de geração nos últimos 7 dias</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SummariesAnalytics />
@@ -136,8 +142,8 @@ const Admin = () => {
 
                 <Card className="shadow-soft">
                   <CardHeader>
-                    <CardTitle>Grupos</CardTitle>
-                    <CardDescription>Grupos mais ativos</CardDescription>
+                    <CardTitle>Top Grupos</CardTitle>
+                    <CardDescription>Grupos com mais resumos na última semana</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <GroupsAnalytics />
@@ -147,11 +153,11 @@ const Admin = () => {
 
               <Card className="shadow-soft">
                 <CardHeader>
-                  <CardTitle>Usuários</CardTitle>
-                  <CardDescription>Análise de usuários da plataforma</CardDescription>
+                  <CardTitle>Logs de Erros</CardTitle>
+                  <CardDescription>Monitoramento de erros do sistema</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <UsersAnalytics />
+                  <ErrorLogsTable />
                 </CardContent>
               </Card>
             </TabsContent>

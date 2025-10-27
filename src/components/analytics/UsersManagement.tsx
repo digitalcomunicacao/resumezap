@@ -18,6 +18,8 @@ interface User {
   email: string;
   subscription_plan: string;
   subscription_end_date: string | null;
+  manual_subscription: boolean;
+  stripe_customer_id: string | null;
   manual_groups_limit: number | null;
   selected_groups_count: number;
   total_summaries_generated: number;
@@ -40,6 +42,8 @@ export const UsersManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [whatsappFilter, setWhatsappFilter] = useState<string>("all");
+  const [subscriptionTypeFilter, setSubscriptionTypeFilter] = useState<string>("all");
+  const [trialStatusFilter, setTrialStatusFilter] = useState<string>("all");
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editingUserPlan, setEditingUserPlan] = useState<User | null>(null);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
@@ -50,7 +54,7 @@ export const UsersManagement = () => {
 
   useEffect(() => {
     filterUsers();
-  }, [users, searchTerm, planFilter, whatsappFilter]);
+  }, [users, searchTerm, planFilter, whatsappFilter, subscriptionTypeFilter, trialStatusFilter]);
 
   const fetchUsers = async () => {
     try {
@@ -93,6 +97,28 @@ export const UsersManagement = () => {
       );
     }
 
+    // Filtro por tipo de assinatura
+    if (subscriptionTypeFilter !== "all") {
+      filtered = filtered.filter((user) => {
+        if (subscriptionTypeFilter === "trial") return user.manual_subscription;
+        if (subscriptionTypeFilter === "stripe") return user.stripe_customer_id !== null;
+        if (subscriptionTypeFilter === "none") return !user.manual_subscription && !user.stripe_customer_id;
+        return true;
+      });
+    }
+
+    // Filtro por status do trial
+    if (trialStatusFilter !== "all") {
+      filtered = filtered.filter((user) => {
+        if (!user.manual_subscription) return trialStatusFilter === "sem_trial";
+        if (!user.subscription_end_date) return trialStatusFilter === "ativo";
+        const now = new Date();
+        const endDate = new Date(user.subscription_end_date);
+        const isExpired = endDate <= now;
+        return trialStatusFilter === "expirado" ? isExpired : !isExpired;
+      });
+    }
+
     setFilteredUsers(filtered);
   };
 
@@ -118,6 +144,26 @@ export const UsersManagement = () => {
       premium: "default",
     };
     return <Badge variant={variants[plan] || "outline"}>{plan}</Badge>;
+  };
+
+  const getSubscriptionTypeBadge = (user: User) => {
+    if (user.stripe_customer_id) {
+      return <Badge className="bg-green-500">Stripe</Badge>;
+    }
+    if (user.manual_subscription) {
+      if (!user.subscription_end_date) {
+        return <Badge className="bg-blue-500">Trial Permanente</Badge>;
+      }
+      const now = new Date();
+      const endDate = new Date(user.subscription_end_date);
+      const isExpired = endDate <= now;
+      return isExpired ? (
+        <Badge variant="destructive">Trial Expirado</Badge>
+      ) : (
+        <Badge className="bg-yellow-500">Trial Temporário</Badge>
+      );
+    }
+    return <Badge variant="outline">Nenhuma</Badge>;
   };
 
   if (loading) {
@@ -161,6 +207,30 @@ export const UsersManagement = () => {
             <SelectItem value="disconnected">Não conectado</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={subscriptionTypeFilter} onValueChange={setSubscriptionTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Tipo de Assinatura" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os tipos</SelectItem>
+            <SelectItem value="trial">Trial Manual</SelectItem>
+            <SelectItem value="stripe">Stripe</SelectItem>
+            <SelectItem value="none">Nenhuma</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={trialStatusFilter} onValueChange={setTrialStatusFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Status Trial" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="ativo">Ativo</SelectItem>
+            <SelectItem value="expirado">Expirado</SelectItem>
+            <SelectItem value="sem_trial">Sem Trial</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Tabela de Usuários */}
@@ -171,6 +241,7 @@ export const UsersManagement = () => {
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Plano</TableHead>
+              <TableHead>Tipo Assinatura</TableHead>
               <TableHead>WhatsApp</TableHead>
               <TableHead>Grupos</TableHead>
               <TableHead>Limite</TableHead>
@@ -209,6 +280,7 @@ export const UsersManagement = () => {
                     </div>
                   </TableCell>
                   <TableCell>{getPlanBadge(user.subscription_plan)}</TableCell>
+                  <TableCell>{getSubscriptionTypeBadge(user)}</TableCell>
                   <TableCell>
                     {user.whatsapp_connected ? (
                       <Badge variant="default" className="bg-green-500">

@@ -6,40 +6,44 @@ import { supabase } from "@/integrations/supabase/client";
 export function OverviewMetrics() {
   const [metrics, setMetrics] = useState({
     totalUsers: 0,
-    activeUsers: 0,
-    summariesToday: 0,
-    summariesWeek: 0,
-    paidUsers: 0,
-    qualifiedLeads: 0,
-    avgLeadScore: 0,
+    trialsActive: 0,
+    trialsPermanent: 0,
+    trialsExpiring: 0,
+    stripeSubscriptions: 0,
+    conversionRate: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const [usersRes, activeRes, todayRes, weekRes, paidRes, leadsRes, leadsData] = await Promise.all([
+        const [usersRes, trialsRes, stripeRes] = await Promise.all([
           supabase.from('profiles').select('id', { count: 'exact', head: true }),
-          supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('whatsapp_connected', true),
-          supabase.from('summaries').select('id', { count: 'exact', head: true }).gte('created_at', new Date().toISOString().split('T')[0]),
-          supabase.from('summaries').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-          supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('subscription_plan', 'free'),
-          supabase.from('lead_qualification').select('id', { count: 'exact', head: true }).gte('lead_score', 30),
-          supabase.from('lead_qualification').select('lead_score'),
+          supabase.from('profiles').select('manual_subscription, subscription_end_date').eq('manual_subscription', true),
+          supabase.from('profiles').select('id', { count: 'exact', head: true }).not('stripe_customer_id', 'is', null),
         ]);
 
-        const avgScore = leadsData.data && leadsData.data.length > 0
-          ? Math.round(leadsData.data.reduce((acc: number, l: any) => acc + (l.lead_score || 0), 0) / leadsData.data.length)
-          : 0;
+        // Processar trials
+        const trialsData = trialsRes.data || [];
+        const now = new Date();
+        const trialsPermanent = trialsData.filter(t => !t.subscription_end_date).length;
+        const trialsExpiring = trialsData.filter(t => {
+          if (!t.subscription_end_date) return false;
+          const endDate = new Date(t.subscription_end_date);
+          return endDate > now;
+        }).length;
+
+        const totalUsers = usersRes.count || 0;
+        const stripeSubscriptions = stripeRes.count || 0;
+        const conversionRate = totalUsers > 0 ? ((stripeSubscriptions / totalUsers) * 100) : 0;
 
         setMetrics({
-          totalUsers: usersRes.count || 0,
-          activeUsers: activeRes.count || 0,
-          summariesToday: todayRes.count || 0,
-          summariesWeek: weekRes.count || 0,
-          paidUsers: paidRes.count || 0,
-          qualifiedLeads: leadsRes.count || 0,
-          avgLeadScore: avgScore,
+          totalUsers,
+          trialsActive: trialsData.length,
+          trialsPermanent,
+          trialsExpiring,
+          stripeSubscriptions,
+          conversionRate,
         });
       } catch (error) {
         console.error('Error fetching metrics:', error);
@@ -51,40 +55,34 @@ export function OverviewMetrics() {
     fetchMetrics();
   }, []);
 
-  const conversionRate = metrics.totalUsers > 0 
-    ? ((metrics.paidUsers / metrics.totalUsers) * 100).toFixed(1)
-    : '0.0';
-
   const cards = [
     {
       title: "Total de Usuários",
       value: metrics.totalUsers,
-      subtitle: `${metrics.activeUsers} ativos`,
+      subtitle: "usuários cadastrados",
       icon: Users,
       color: "text-blue-500",
     },
     {
-      title: "Resumos Hoje",
-      value: metrics.summariesToday,
-      subtitle: `${metrics.summariesWeek} esta semana`,
-      icon: FileText,
+      title: "Trials Ativos",
+      value: metrics.trialsActive,
+      subtitle: `${metrics.trialsPermanent} permanentes, ${metrics.trialsExpiring} com prazo`,
+      icon: Users,
+      color: "text-yellow-500",
+    },
+    {
+      title: "Assinaturas Pagas",
+      value: metrics.stripeSubscriptions,
+      subtitle: "via Stripe",
+      icon: CreditCard,
       color: "text-green-500",
     },
     {
       title: "Taxa de Conversão",
-      value: `${conversionRate}%`,
-      subtitle: `${metrics.paidUsers} usuários pagos`,
-      icon: CreditCard,
-      color: "text-purple-500",
-    },
-    {
-      title: "Média/Usuário",
-      value: metrics.activeUsers > 0 
-        ? (metrics.summariesWeek / metrics.activeUsers).toFixed(1)
-        : '0',
-      subtitle: "resumos/semana",
+      value: `${metrics.conversionRate.toFixed(1)}%`,
+      subtitle: `${metrics.stripeSubscriptions} de ${metrics.totalUsers} usuários`,
       icon: MessageSquare,
-      color: "text-orange-500",
+      color: "text-purple-500",
     },
   ];
 
