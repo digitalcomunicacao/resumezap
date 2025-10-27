@@ -43,11 +43,7 @@ interface SubscriptionContextType {
   loading: boolean;
   groupsLimit: number;
   checkSubscription: () => Promise<void>;
-  createCheckout: (planKey: SubscriptionPlan) => Promise<void>;
   openCustomerPortal: () => Promise<void>;
-  checkoutClientSecret: string | null;
-  checkoutModalOpen: boolean;
-  setCheckoutModalOpen: (open: boolean) => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -57,8 +53,6 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const { toast } = useToast();
 
   const checkSubscription = async () => {
@@ -91,40 +85,6 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const createCheckout = async (planKey: SubscriptionPlan) => {
-    try {
-      if (planKey === 'free') {
-        toast({
-          title: 'Plano gratuito',
-          description: 'Você já está no plano gratuito.',
-        });
-        return;
-      }
-
-      const plan = STRIPE_PLANS[planKey];
-      if (!plan.price_id) {
-        throw new Error('Price ID not found for this plan');
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { price_id: plan.price_id },
-      });
-
-      if (error) throw error;
-
-      if (data?.clientSecret) {
-        setCheckoutClientSecret(data.clientSecret);
-        setCheckoutModalOpen(true);
-      }
-    } catch (error) {
-      console.error('Error creating checkout:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível iniciar o processo de assinatura.',
-        variant: 'destructive',
-      });
-    }
-  };
 
   const openCustomerPortal = async () => {
     try {
@@ -173,11 +133,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         loading,
         groupsLimit,
         checkSubscription,
-        createCheckout,
         openCustomerPortal,
-        checkoutClientSecret,
-        checkoutModalOpen,
-        setCheckoutModalOpen,
       }}
     >
       {children}

@@ -40,9 +40,9 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated or email not available");
     logStep("User authenticated", { userId: user.id, email: user.email });
 
-    const { price_id } = await req.json();
+    const { price_id, plan_key } = await req.json();
     if (!price_id) throw new Error("price_id is required");
-    logStep("Price ID received", { price_id });
+    logStep("Price ID received", { price_id, plan_key });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     
@@ -70,7 +70,7 @@ serve(async (req) => {
       ],
       mode: "subscription",
       ui_mode: "embedded",
-      return_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+      return_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}${plan_key ? `&plan=${plan_key}` : ''}`,
     });
 
     logStep("Checkout session created", { sessionId: session.id, clientSecret: session.client_secret });

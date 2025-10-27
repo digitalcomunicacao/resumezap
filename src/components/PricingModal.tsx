@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Check, Sparkles } from "lucide-react";
 import { useSubscription, STRIPE_PLANS, SubscriptionPlan } from "@/contexts/SubscriptionContext";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
 interface PricingModalProps {
@@ -13,16 +14,17 @@ interface PricingModalProps {
 const paidPlans = Object.entries(STRIPE_PLANS).filter(([key]) => key !== 'free') as [SubscriptionPlan, typeof STRIPE_PLANS[SubscriptionPlan]][];
 
 export const PricingModal = ({ open, onOpenChange }: PricingModalProps) => {
-  const { createCheckout, subscriptionPlan } = useSubscription();
+  const { subscriptionPlan } = useSubscription();
+  const navigate = useNavigate();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   const handleSelectPlan = async (planKey: SubscriptionPlan) => {
     setLoadingPlan(planKey);
     try {
-      await createCheckout(planKey);
       onOpenChange(false);
+      navigate(`/checkout?plan=${planKey}`);
     } catch (error) {
-      console.error('Error creating checkout:', error);
+      console.error('Error navigating to checkout:', error);
     } finally {
       setLoadingPlan(null);
     }

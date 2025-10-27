@@ -71,7 +71,7 @@ const plans = [
 ];
 
 export const Pricing = () => {
-  const { subscriptionPlan, createCheckout, loading } = useSubscription();
+  const { subscriptionPlan, loading } = useSubscription();
   const navigate = useNavigate();
 
   const handlePlanClick = async (planKey: SubscriptionPlan) => {
@@ -93,7 +93,8 @@ export const Pricing = () => {
       return;
     }
 
-    await createCheckout(planKey);
+    // Navigate to checkout page
+    navigate(`/checkout?plan=${planKey}`);
   };
 
   const isCurrentPlan = (planKey: SubscriptionPlan) => planKey === subscriptionPlan;
