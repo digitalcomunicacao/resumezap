@@ -8,6 +8,7 @@ import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { WhatsAppConnectionModal } from "@/components/WhatsAppConnectionModal";
+import GroupsListModal from "@/components/GroupsListModal";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -15,6 +16,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
 
   useEffect(() => {
@@ -214,13 +216,24 @@ const Dashboard = () => {
               <CardHeader>
                 <CardTitle>Meus Grupos</CardTitle>
                 <CardDescription>
-                  Selecione os grupos que deseja resumir
+                  {profile?.selected_groups_count > 0 
+                    ? `${profile.selected_groups_count} grupo(s) selecionado(s)`
+                    : "Selecione os grupos que deseja resumir"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" disabled>
-                  Em Breve
+                <Button 
+                  className="w-full" 
+                  onClick={() => setShowGroupsModal(true)}
+                  disabled={!whatsappConnection}
+                >
+                  {profile?.selected_groups_count > 0 ? "Gerenciar Grupos" : "Buscar Grupos"}
                 </Button>
+                {!whatsappConnection && (
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Conecte o WhatsApp primeiro
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -259,6 +272,20 @@ const Dashboard = () => {
         open={showConnectionModal}
         onOpenChange={setShowConnectionModal}
         onSuccess={handleConnectionSuccess}
+      />
+
+      <GroupsListModal
+        open={showGroupsModal}
+        onOpenChange={setShowGroupsModal}
+        userPlan={profile?.subscription_plan || 'free'}
+        onGroupsUpdated={async () => {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user?.id)
+            .single();
+          setProfile(profileData);
+        }}
       />
     </div>
   );
