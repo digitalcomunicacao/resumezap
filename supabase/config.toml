@@ -29,3 +29,6 @@ verify_jwt = true
 
 [functions.send-group-summary]
 verify_jwt = false
+
+[functions.manual-send-summary]
+verify_jwt = true

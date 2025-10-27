@@ -17,27 +17,50 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const authHeader = req.headers.get('Authorization')!;
-
-    // Cliente para autenticação do usuário (usando anon key)
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
+    
     // Cliente admin para queries (usando service role key)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Authenticate user
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    // Extract user ID from JWT token
+    const authHeader = req.headers.get('Authorization') || '';
     
-    if (authError || !user) {
-      logStep("Authentication failed", { error: authError });
-      throw new Error('Unauthorized');
+    if (!authHeader.startsWith('Bearer ')) {
+      logStep('Missing or invalid Authorization header');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
     }
 
-    logStep("User authenticated", { userId: user.id });
+    logStep('Authorization header present');
+
+    const token = authHeader.replace('Bearer ', '');
+    let userId: string | null = null;
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userId = payload?.sub || null;
+      logStep('Token decoded', { userId });
+    } catch (e) {
+      logStep('Failed to decode token', { error: e });
+    }
+
+    if (!userId) {
+      logStep('No userId in token');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
+    }
+
+    logStep('User authenticated', { userId });
 
     const { summaryId } = await req.json();
 
@@ -52,7 +75,7 @@ serve(async (req) => {
       .from('summaries')
       .select('*')
       .eq('id', summaryId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (summaryError || !summary) {
@@ -89,7 +112,7 @@ serve(async (req) => {
     const { data: connection, error: connectionError } = await supabaseAdmin
       .from('whatsapp_connections')
       .select('instance_name, status')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'connected')
       .maybeSingle();
 
@@ -104,7 +127,7 @@ serve(async (req) => {
     const sendResponse = await supabaseAdmin.functions.invoke('send-group-summary', {
       body: {
         summaryId: summary.id,
-        userId: user.id,
+        userId: userId,
         groupId: summary.group_id,
         groupName: summary.group_name,
         summaryText: summary.summary_text,
