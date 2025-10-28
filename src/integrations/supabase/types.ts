@@ -212,6 +212,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          connection_mode: string
           created_at: string | null
           email: string | null
           full_name: string | null
@@ -236,6 +237,7 @@ export type Database = {
           whatsapp_instance_id: string | null
         }
         Insert: {
+          connection_mode?: string
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           whatsapp_instance_id?: string | null
         }
         Update: {
+          connection_mode?: string
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -505,10 +508,12 @@ export type Database = {
       whatsapp_connections: {
         Row: {
           connected_at: string | null
+          connection_type: string
           created_at: string | null
           id: string
           instance_id: string
           instance_name: string
+          last_connected_at: string | null
           phone_number: string | null
           qr_code: string | null
           qr_code_expires_at: string | null
@@ -518,10 +523,12 @@ export type Database = {
         }
         Insert: {
           connected_at?: string | null
+          connection_type?: string
           created_at?: string | null
           id?: string
           instance_id: string
           instance_name: string
+          last_connected_at?: string | null
           phone_number?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null
@@ -531,10 +538,12 @@ export type Database = {
         }
         Update: {
           connected_at?: string | null
+          connection_type?: string
           created_at?: string | null
           id?: string
           instance_id?: string
           instance_name?: string
+          last_connected_at?: string | null
           phone_number?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null
