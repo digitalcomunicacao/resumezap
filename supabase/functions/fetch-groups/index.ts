@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 
     // Fetch groups from Evolution API with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds timeout
 
     let fetchGroupsResponse;
     let chatsResponse;
@@ -123,12 +123,22 @@ Deno.serve(async (req) => {
           errorMessage = errorText || errorMessage;
         }
         
+        // Fallback to DB cache and return 200 to avoid generic client error
+        const { data: savedGroups } = await supabaseClient
+          .from('whatsapp_groups')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_selected', { ascending: false })
+          .order('participant_count', { ascending: false })
+          .order('group_name', { ascending: true });
+
         return new Response(
           JSON.stringify({ 
-            error: errorMessage,
-            details: errorText 
+            groups: savedGroups || [],
+            warning: errorMessage,
+            message: 'Grupos carregados do cache (API retornou erro)'
           }),
-          { status: fetchGroupsResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
@@ -156,12 +166,23 @@ Deno.serve(async (req) => {
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.error('Evolution API timeout after 15 seconds');
+        console.error('Evolution API timeout after 25 seconds');
+        // Fallback to DB cache on timeout
+        const { data: savedGroups } = await supabaseClient
+          .from('whatsapp_groups')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_selected', { ascending: false })
+          .order('participant_count', { ascending: false })
+          .order('group_name', { ascending: true });
+
         return new Response(
           JSON.stringify({ 
-            error: 'Timeout ao buscar grupos. A API está demorando muito para responder. Tente novamente em alguns minutos.' 
+            groups: savedGroups || [],
+            warning: 'Timeout ao buscar grupos. Retornando dados em cache.',
+            message: 'Grupos carregados do cache (timeout)'
           }),
-          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       console.error('Evolution API fetch error:', error);
