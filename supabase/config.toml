@@ -1,7 +1,7 @@
 project_id = "wfzjcklrdevhblcuxaoq"
 
 [functions.generate-qr-code]
-verify_jwt = false
+verify_jwt = true
 
 [functions.scheduled-summaries]
 verify_jwt = false

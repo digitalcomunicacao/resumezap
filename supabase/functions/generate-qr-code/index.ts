@@ -13,16 +13,18 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL')!;
     const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!;
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: req.headers.get('Authorization')! },
+      },
+    });
 
-    // Get authenticated user
-    const authHeader = req.headers.get('Authorization')!;
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Get authenticated user (JWT already verified by Supabase)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
       console.error('Auth error:', userError);
