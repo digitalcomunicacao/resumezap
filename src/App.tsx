@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import ConnectWhatsApp from "./pages/ConnectWhatsApp";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Checkout from "./pages/Checkout";
@@ -69,6 +70,7 @@ const AppContent = () => {
           <Route path="/auth" element={<Auth />} />
           <Route path="/qualify" element={<Qualify />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/connect-whatsapp" element={<ConnectWhatsApp />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<Admin />} />

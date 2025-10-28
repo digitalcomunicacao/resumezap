@@ -116,7 +116,7 @@ const Dashboard = () => {
   };
 
   const handleWhatsAppConnect = () => {
-    setShowConnectionModal(true);
+    navigate("/connect-whatsapp");
   };
 
   const handleGenerateSummaries = async () => {
