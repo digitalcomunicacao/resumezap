@@ -106,12 +106,28 @@ serve(async (req) => {
 
     const userPlan = profile?.subscription_plan || 'free';
 
-    // Get user's summary preferences
-    const { data: preferences } = await supabase
+    // Get user's summary preferences (force fresh data, no cache)
+    const { data: preferences, error: prefsError } = await supabase
       .from('summary_preferences')
       .select('*, timezone')
       .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
+
+    if (prefsError) {
+      console.log('Using default preferences:', prefsError.message);
+    } else {
+      console.log('User preferences loaded:', {
+        tone: preferences?.tone,
+        size: preferences?.size,
+        thematic_focus: preferences?.thematic_focus,
+        sentiment: preferences?.include_sentiment_analysis,
+        smart_alerts: preferences?.enable_smart_alerts,
+        enterprise_detail: preferences?.enterprise_detail_level,
+        timezone: preferences?.timezone
+      });
+    }
 
     const userTimezone = preferences?.timezone || 'America/Sao_Paulo';
 
