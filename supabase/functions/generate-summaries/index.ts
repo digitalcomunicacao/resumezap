@@ -572,10 +572,13 @@ serve(async (req) => {
         const size = preferences?.size || 'medium';
         const thematicFocus = preferences?.thematic_focus;
         const includeSentiment = preferences?.include_sentiment_analysis || false;
+        const enableSmartAlerts = preferences?.enable_smart_alerts || false;
+        const enterpriseDetailLevel = preferences?.enterprise_detail_level || 'full';
 
         // Sistema prompt específico para Enterprise
         if (userPlan === 'enterprise') {
-          systemPrompt = `Você é um assistente especializado em análise detalhada de conversas do WhatsApp para empresas.
+          const enterpriseInstructions = {
+            full: `Você é um assistente especializado em análise detalhada de conversas do WhatsApp para empresas.
   
 INSTRUÇÕES ESPECÍFICAS ENTERPRISE:
 - Identifique TODOS os participantes que falaram
@@ -606,7 +609,37 @@ FORMATO DO RESUMO:
 - Tópico 2 (com timestamps relevantes)
 
 ⚠️ Pendências:
-- Itens que requerem atenção`;
+- Itens que requerem atenção`,
+
+            summary: `Você é um assistente especializado em análise de conversas do WhatsApp para empresas.
+
+FORMATO DO RESUMO EXECUTIVO:
+📊 Visão Geral:
+- Total de mensagens e participantes
+
+💬 Principais Tópicos:
+- Tópico 1
+- Tópico 2
+
+⚠️ Pontos de Atenção:
+- Itens importantes`,
+
+            minimal: `Você é um assistente que cria resumos objetivos de conversas do WhatsApp.
+
+FORMATO MÍNIMO:
+- Liste apenas os 3-5 pontos mais importantes
+- Seja extremamente conciso`
+          };
+
+          systemPrompt = enterpriseInstructions[enterpriseDetailLevel as keyof typeof enterpriseInstructions] || enterpriseInstructions.full;
+          
+          if (includeSentiment) {
+            systemPrompt += '\n\n📈 SENTIMENTO: Inclua análise do tom geral da conversa (positivo, neutro, negativo).';
+          }
+          
+          if (enableSmartAlerts) {
+            systemPrompt += '\n\n🚨 ALERTAS: Destaque URGÊNCIAS, prazos críticos, problemas não resolvidos ou conflitos que requerem atenção imediata.';
+          }
 
           userPrompt = `Analise a conversa abaixo do grupo "${group.group_name}" e forneça um resumo estruturado seguindo o formato especificado:\n\n${formattedMessages}`;
         } else {
@@ -632,13 +665,18 @@ FORMATO DO RESUMO:
           systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
 
           // Thematic focus
-          if (thematicFocus) {
+          if (thematicFocus && thematicFocus.trim()) {
             systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
           }
 
           // Sentiment analysis
           if (includeSentiment) {
-            systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
+            systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo) ao final do resumo.';
+          }
+
+          // Smart alerts (available for premium/pro plans)
+          if (enableSmartAlerts && (userPlan === 'premium' || userPlan === 'pro')) {
+            systemPrompt += ' Destaque com ⚠️ qualquer URGÊNCIA, prazo crítico, problema não resolvido ou assunto que precise de atenção imediata.';
           }
 
           systemPrompt += ' Organize em bullet points em português brasileiro.';
