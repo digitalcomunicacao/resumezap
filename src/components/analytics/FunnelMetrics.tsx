@@ -24,10 +24,10 @@ interface FunnelStage {
 }
 
 const COLORS = {
-  visitors: 'hsl(142 76% 56%)',
-  signups: 'hsl(142 70% 45%)',
-  whatsapp: 'hsl(174 84% 35%)',
-  subscribers: 'hsl(142 76% 30%)',
+  visitors: '#25D366',    // WhatsApp green bright
+  signups: '#128C7E',     // WhatsApp green medium
+  whatsapp: '#075E54',    // WhatsApp green dark
+  subscribers: '#34B7F1', // WhatsApp blue
 };
 
 export function FunnelMetrics() {
@@ -144,71 +144,80 @@ export function FunnelMetrics() {
       </CardHeader>
       <CardContent>
         {/* Custom Funnel Visualization */}
-        <div className="mb-8 px-4">
-          <div className="space-y-2">
+        <div className="mb-8 px-2 md:px-4">
+          <div className="space-y-3">
             {stages.map((stage, index) => {
               const Icon = stage.icon;
               const isLast = index === stages.length - 1;
               const maxValue = stages[0]?.value || 1;
-              const widthPercentage = (stage.value / maxValue) * 100;
+              const widthPercentage = Math.max((stage.value / maxValue) * 100, 25);
               
               return (
-                <div key={stage.name} className="space-y-1">
-                  {/* Stage Bar */}
-                  <div className="relative group">
+                <div key={stage.name} className="space-y-2">
+                  {/* Stage Bar Container */}
+                  <div className="relative">
                     <div 
                       className={cn(
-                        "relative h-16 rounded-lg transition-all duration-500 ease-out",
-                        "hover:scale-[1.02] hover:shadow-lg cursor-pointer",
-                        "flex items-center justify-between px-4 md:px-6",
+                        "relative overflow-hidden rounded-xl transition-all duration-700 ease-out",
+                        "hover:scale-[1.02] hover:shadow-2xl cursor-pointer group",
+                        "border-2 border-white/10",
                         "animate-fade-in"
                       )}
                       style={{
-                        width: `${Math.max(widthPercentage, 20)}%`,
-                        background: `linear-gradient(135deg, ${stage.fill}, ${stage.fill}dd)`,
-                        boxShadow: `0 4px 12px ${stage.fill}30`,
-                        animationDelay: `${index * 100}ms`
+                        width: `${widthPercentage}%`,
+                        minWidth: '280px',
+                        background: `linear-gradient(135deg, ${stage.fill} 0%, ${stage.fill}dd 100%)`,
+                        boxShadow: `0 8px 24px ${stage.fill}40, 0 4px 8px ${stage.fill}20`,
+                        animationDelay: `${index * 150}ms`
                       }}
                     >
-                      {/* Left side: Icon + Name */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm flex-shrink-0">
-                          <Icon className="w-5 h-5 text-white" />
+                      {/* Shine effect on hover */}
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent 
+                                   -translate-x-full group-hover:translate-x-full transition-transform duration-1000"
+                      />
+                      
+                      {/* Content */}
+                      <div className="relative flex items-center justify-between px-4 md:px-6 py-4 gap-3">
+                        {/* Left: Icon + Name */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="p-2.5 rounded-xl bg-white/30 backdrop-blur-sm flex-shrink-0 
+                                        shadow-lg group-hover:bg-white/40 transition-colors">
+                            <Icon className="w-5 h-5 md:w-6 md:h-6 text-white drop-shadow-md" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm md:text-base font-bold text-white drop-shadow-md truncate">
+                              {stage.name}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm md:text-base font-semibold text-white truncate">
-                            {stage.name}
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Right side: Value + Percentage */}
-                      <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
-                        <div className="text-right">
-                          <p className="text-xl md:text-2xl font-bold text-white">
+                        {/* Right: Stats */}
+                        <div className="flex flex-col items-end flex-shrink-0">
+                          <p className="text-2xl md:text-3xl font-black text-white drop-shadow-lg">
                             {stage.value.toLocaleString()}
                           </p>
-                          <p className="text-xs text-white/80">
+                          <p className="text-xs md:text-sm font-semibold text-white/90 drop-shadow">
                             {stage.percentage.toFixed(1)}% do total
                           </p>
                         </div>
                       </div>
-
-                      {/* Hover overlay */}
-                      <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 rounded-lg transition-all duration-300" />
                     </div>
                   </div>
 
-                  {/* Conversion Arrow */}
+                  {/* Conversion Arrow Between Stages */}
                   {!isLast && stage.conversionRate !== undefined && (
                     <div 
-                      className="flex items-center gap-2 pl-8 py-1 animate-fade-in"
-                      style={{ animationDelay: `${index * 100 + 50}ms` }}
+                      className="flex items-center gap-2 pl-6 md:pl-10 py-1 animate-fade-in"
+                      style={{ animationDelay: `${index * 150 + 75}ms` }}
                     >
-                      <ArrowDownRight className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {stage.conversionRate.toFixed(1)}% convertem para próxima etapa
-                      </span>
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full 
+                                    bg-muted/50 border border-border/50">
+                        <ArrowDownRight className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">
+                          {stage.conversionRate.toFixed(1)}% convertem
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
