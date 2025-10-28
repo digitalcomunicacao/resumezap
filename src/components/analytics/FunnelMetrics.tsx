@@ -12,14 +12,7 @@ import {
   CreditCard,
   ArrowDownRight
 } from "lucide-react";
-import {
-  FunnelChart,
-  Funnel,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  LabelList
-} from 'recharts';
+import { cn } from "@/lib/utils";
 
 interface FunnelStage {
   name: string;
@@ -116,39 +109,6 @@ export function FunnelMetrics() {
     };
   }, []);
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      const Icon = data.icon;
-      
-      return (
-        <Card className="shadow-lg border-2">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Icon className="w-4 h-4" style={{ color: data.fill }} />
-              <p className="font-semibold text-sm">{data.name}</p>
-            </div>
-            <p className="text-3xl font-bold mb-2" style={{ color: data.fill }}>
-              {data.value.toLocaleString()}
-            </p>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Do total</span>
-                <span className="font-semibold">{data.percentage.toFixed(1)}%</span>
-              </div>
-              {data.conversionRate !== undefined && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Taxa de conversão</span>
-                  <span className="font-semibold">{data.conversionRate.toFixed(1)}%</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-    return null;
-  };
 
   if (loading) {
     return (
@@ -183,32 +143,81 @@ export function FunnelMetrics() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Recharts Funnel Visualization */}
-        <div className="mb-6">
-          <ResponsiveContainer width="100%" height={400}>
-            <FunnelChart>
-              <Tooltip content={<CustomTooltip />} />
-              <Funnel
-                dataKey="value"
-                data={stages}
-                isAnimationActive
-              >
-                <LabelList 
-                  position="inside" 
-                  fill="#fff" 
-                  stroke="none" 
-                  dataKey="name" 
-                  style={{ fontSize: '14px', fontWeight: 600 }}
-                />
-                {stages.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Funnel>
-            </FunnelChart>
-          </ResponsiveContainer>
+        {/* Custom Funnel Visualization */}
+        <div className="mb-8 px-4">
+          <div className="space-y-2">
+            {stages.map((stage, index) => {
+              const Icon = stage.icon;
+              const isLast = index === stages.length - 1;
+              const maxValue = stages[0]?.value || 1;
+              const widthPercentage = (stage.value / maxValue) * 100;
+              
+              return (
+                <div key={stage.name} className="space-y-1">
+                  {/* Stage Bar */}
+                  <div className="relative group">
+                    <div 
+                      className={cn(
+                        "relative h-16 rounded-lg transition-all duration-500 ease-out",
+                        "hover:scale-[1.02] hover:shadow-lg cursor-pointer",
+                        "flex items-center justify-between px-4 md:px-6",
+                        "animate-fade-in"
+                      )}
+                      style={{
+                        width: `${Math.max(widthPercentage, 20)}%`,
+                        background: `linear-gradient(135deg, ${stage.fill}, ${stage.fill}dd)`,
+                        boxShadow: `0 4px 12px ${stage.fill}30`,
+                        animationDelay: `${index * 100}ms`
+                      }}
+                    >
+                      {/* Left side: Icon + Name */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm flex-shrink-0">
+                          <Icon className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm md:text-base font-semibold text-white truncate">
+                            {stage.name}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right side: Value + Percentage */}
+                      <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
+                        <div className="text-right">
+                          <p className="text-xl md:text-2xl font-bold text-white">
+                            {stage.value.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-white/80">
+                            {stage.percentage.toFixed(1)}% do total
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 rounded-lg transition-all duration-300" />
+                    </div>
+                  </div>
+
+                  {/* Conversion Arrow */}
+                  {!isLast && stage.conversionRate !== undefined && (
+                    <div 
+                      className="flex items-center gap-2 pl-8 py-1 animate-fade-in"
+                      style={{ animationDelay: `${index * 100 + 50}ms` }}
+                    >
+                      <ArrowDownRight className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {stage.conversionRate.toFixed(1)}% convertem para próxima etapa
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <Separator className="my-6" />
+        <Separator className="my-8" />
 
         {/* Métricas Chave */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
