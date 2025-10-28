@@ -129,7 +129,7 @@ export const SelectGroupsForSummaryModal = ({
         const noMessages = details.filter((d: any) => d.reason === 'no_messages').length;
         const noText = details.filter((d: any) => d.reason === 'no_text_messages').length;
         
-        let description = "Nenhuma mensagem de texto encontrada no período (últimas 24h).";
+        let description = "Nenhuma mensagem de texto encontrada no período recente.";
         if (noMessages > 0) {
           description += ` ${noMessages} grupo(s) sem mensagens.`;
         }

@@ -123,9 +123,13 @@ serve(async (req) => {
     const timestampFromSeconds = Math.floor(searchWindowStart.getTime() / 1000);
     const timestampFromMs = searchWindowStart.getTime();
     
-    // Janela móvel: últimas 24h no fuso do usuário
+    // Janela móvel: últimas 24h no fuso do usuário (com fallbacks)
     const last24hStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const last7dStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const last30dStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const last24hStartMs = last24hStart.getTime();
+    const last7dStartMs = last7dStart.getTime();
+    const last30dStartMs = last30dStart.getTime();
     const nowMs = Date.now();
     
     console.log(`[TIMES] timezone=${userTimezone}, searchWindow=${searchWindowStart.toISOString()}, last24hStart=${new Date(last24hStartMs).toISOString()}`);
@@ -193,16 +197,24 @@ serve(async (req) => {
       if (Array.isArray(data)) return data;
       
       // Common keys to check
-      const possibleKeys = ['data', 'messages', 'result', 'items', 'records'];
+      const possibleKeys = ['data', 'messages', 'result', 'items', 'records', 'response'];
       for (const key of possibleKeys) {
         if (data?.[key] && Array.isArray(data[key])) {
           return data[key];
         }
-        // Check nested structures (e.g., result.messages)
+        // Check nested structures (e.g., result.messages, result.data)
         if (data?.[key] && typeof data[key] === 'object') {
+          const nestedObj = data[key];
           for (const nestedKey of possibleKeys) {
-            if (Array.isArray(data[key][nestedKey])) {
-              return data[key][nestedKey];
+            if (Array.isArray(nestedObj?.[nestedKey])) {
+              return nestedObj[nestedKey];
+            }
+            if (nestedObj?.[nestedKey] && typeof nestedObj[nestedKey] === 'object') {
+              for (const deepKey of possibleKeys) {
+                if (Array.isArray(nestedObj[nestedKey]?.[deepKey])) {
+                  return nestedObj[nestedKey][deepKey];
+                }
+              }
             }
           }
         }
@@ -422,13 +434,22 @@ serve(async (req) => {
         // Ordenar por timestamp (ascendente)
         processedMessages.sort((a, b) => (a?.timestampMs || 0) - (b?.timestampMs || 0));
 
-        // Filtrar mensagens das últimas 24h (janela móvel)
-        const windowMessages = processedMessages.filter((msg) => {
-          if (!msg) return false;
-          return (msg.timestampMs as number) >= last24hStartMs && (msg.timestampMs as number) <= nowMs;
-        });
+        // Filtrar mensagens da janela móvel com fallbacks progressivos
+        const applyWindow = (msgs: any[], fromMs: number, toMs: number) =>
+          msgs.filter((m) => m && (m.timestampMs as number) >= fromMs && (m.timestampMs as number) <= toMs);
 
-        console.log(`[TIMES] ${group.group_name}: filtered to ${windowMessages.length} messages in the last 24h`);
+        let windowLabel = 'last24h';
+        let windowMessages = applyWindow(processedMessages as any[], last24hStartMs, nowMs);
+        if (windowMessages.length === 0) {
+          windowLabel = 'last7d';
+          windowMessages = applyWindow(processedMessages as any[], last7dStartMs, nowMs);
+        }
+        if (windowMessages.length === 0) {
+          windowLabel = 'last30d';
+          windowMessages = applyWindow(processedMessages as any[], last30dStartMs, nowMs);
+        }
+
+        console.log(`[TIMES] ${group.group_name}: filtered to ${windowMessages.length} messages in ${windowLabel}`);
 
         // Log exemplos de timestamps (até 3)
         windowMessages.slice(0, 3).forEach((msg, idx) => {
@@ -445,7 +466,7 @@ serve(async (req) => {
           console.log(`[TIMES] Example ${idx + 1}: ${msg.timestampMs} -> ${formatted}`);
         });
 
-        // Também considerar mensagens sem texto (mídia, stickers, áudios) para detectar atividade real
+        // Considerar interações sem texto (mídia, sticker, áudio) para detectar atividade
         const allWindowMessages = messages
           .map((raw: any) => {
             const ts = getTimestampMs(raw);
@@ -455,7 +476,10 @@ serve(async (req) => {
             return { sender, timestampMs: ts, hasText };
           })
           .filter(Boolean)
-          .filter((m: any) => m.timestampMs >= last24hStartMs && m.timestampMs <= nowMs) as Array<{sender: string; timestampMs: number; hasText: boolean}>;
+          .filter((m: any) => {
+            const from = windowLabel === 'last24h' ? last24hStartMs : windowLabel === 'last7d' ? last7dStartMs : last30dStartMs;
+            return m.timestampMs >= from && m.timestampMs <= nowMs;
+          }) as Array<{sender: string; timestampMs: number; hasText: boolean}>;
 
         // Formatar mensagens para o AI
         let formattedMessages = windowMessages
@@ -475,7 +499,7 @@ serve(async (req) => {
           .filter(Boolean)
           .join('\n');
 
-        // Se não houver mensagens de texto, mas houve atividade, criar linhas sintéticas para o resumo
+        // Se não houver mensagens de texto, mas houve atividade, criar linhas sintéticas
         if (!formattedMessages || formattedMessages.length === 0) {
           if (allWindowMessages.length > 0) {
             const synthetic = allWindowMessages
@@ -493,19 +517,20 @@ serve(async (req) => {
               })
               .join('\n');
             formattedMessages = synthetic;
-            console.log(`No text messages, but found ${allWindowMessages.length} interactions for ${group.group_name}; generating activity summary.`);
+            console.log(`No text messages, but found ${allWindowMessages.length} interactions for ${group.group_name}; generating activity summary (${windowLabel}).`);
           }
         }
 
         const textMessageCount = formattedMessages ? formattedMessages.split('\n').filter(Boolean).length : 0;
 
         if (!formattedMessages || formattedMessages.length === 0) {
-          console.log(`No text content found in ${messages.length} messages for group ${group.group_name}`);
+          const reason = messages.length === 0 ? 'no_messages' : 'no_text_messages';
+          console.log(`No content available for ${group.group_name} (reason=${reason})`);
           groupDetails.push({
             group_name: group.group_name,
             fetched_count: messages.length,
             text_count: 0,
-            reason: 'no_text_messages'
+            reason
           });
           continue;
         }
