@@ -78,13 +78,15 @@ serve(async (req) => {
     let groupsQuery = supabase
       .from('whatsapp_groups')
       .select('*')
-      .eq('user_id', userId)
-      .eq('is_selected', true);
+      .eq('user_id', userId);
     
-    // Filter by specific group IDs if provided
+    // If specific group IDs are provided from the UI, ignore is_selected and use the explicit list
     if (requestBody.selectedGroupIds && Array.isArray(requestBody.selectedGroupIds) && requestBody.selectedGroupIds.length > 0) {
       groupsQuery = groupsQuery.in('group_id', requestBody.selectedGroupIds);
-      console.log(`Filtering to ${requestBody.selectedGroupIds.length} specific groups`);
+      console.log(`Filtering to ${requestBody.selectedGroupIds.length} specific groups (explicit selection)`);
+    } else {
+      // Fallback to user's saved selections
+      groupsQuery = groupsQuery.eq('is_selected', true);
     }
     
     const { data: groups, error: groupsError } = await groupsQuery;
@@ -340,11 +342,38 @@ serve(async (req) => {
           messages = await fetchMessages(timestampFromSeconds, 'seconds');
           fetchMethod = 'seconds';
           
-          // If no messages with seconds, retry with milliseconds
+          // If no messages with seconds, retry with milliseconds; if still none, retry without timestamp filter
           if (messages.length === 0) {
             console.log(`Retrying with milliseconds for ${group.group_name}`);
             messages = await fetchMessages(timestampFromMs, 'milliseconds');
             fetchMethod = 'milliseconds';
+            if (messages.length === 0) {
+              console.log(`Retrying without timestamp filter for ${group.group_name}`);
+              const response = await fetch(messagesUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': evolutionApiKey,
+                },
+                body: JSON.stringify({
+                  where: {
+                    key: {
+                      remoteJid: group.group_id,
+                    },
+                  },
+                  limit: 500,
+                }),
+              });
+              if (response.ok) {
+                const data = await response.json();
+                const extracted = extractMessages(data);
+                console.log(`Fetched with no_filter: ${extracted.length} messages for ${group.group_name}`);
+                messages = extracted;
+                fetchMethod = 'no_filter';
+              } else {
+                console.error(`no_filter fetch failed: HTTP ${response.status}`);
+              }
+            }
           }
         } catch (fetchError) {
           console.error(`Failed to fetch messages for group ${group.group_name}:`, fetchError);
@@ -416,8 +445,20 @@ serve(async (req) => {
           console.log(`[TIMES] Example ${idx + 1}: ${msg.timestampMs} -> ${formatted}`);
         });
 
+        // Também considerar mensagens sem texto (mídia, stickers, áudios) para detectar atividade real
+        const allWindowMessages = messages
+          .map((raw: any) => {
+            const ts = getTimestampMs(raw);
+            if (!ts) return null;
+            const sender = extractSenderName(raw);
+            const hasText = !!extractTextContent(raw);
+            return { sender, timestampMs: ts, hasText };
+          })
+          .filter(Boolean)
+          .filter((m: any) => m.timestampMs >= last24hStartMs && m.timestampMs <= nowMs) as Array<{sender: string; timestampMs: number; hasText: boolean}>;
+
         // Formatar mensagens para o AI
-        const formattedMessages = windowMessages
+        let formattedMessages = windowMessages
           .map((msg) => {
             if (!msg) return null;
             const formattedDate = new Date(msg.timestampMs).toLocaleString('pt-BR', {
@@ -434,9 +475,31 @@ serve(async (req) => {
           .filter(Boolean)
           .join('\n');
 
-        const textMessageCount = formattedMessages.split('\n').length;
+        // Se não houver mensagens de texto, mas houve atividade, criar linhas sintéticas para o resumo
+        if (!formattedMessages || formattedMessages.length === 0) {
+          if (allWindowMessages.length > 0) {
+            const synthetic = allWindowMessages
+              .map((m) => {
+                const formattedDate = new Date(m.timestampMs).toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hourCycle: 'h23',
+                  timeZone: userTimezone
+                });
+                return `[${formattedDate}] ${m.sender}: (interação sem texto)`;
+              })
+              .join('\n');
+            formattedMessages = synthetic;
+            console.log(`No text messages, but found ${allWindowMessages.length} interactions for ${group.group_name}; generating activity summary.`);
+          }
+        }
 
-        if (formattedMessages.length === 0) {
+        const textMessageCount = formattedMessages ? formattedMessages.split('\n').filter(Boolean).length : 0;
+
+        if (!formattedMessages || formattedMessages.length === 0) {
           console.log(`No text content found in ${messages.length} messages for group ${group.group_name}`);
           groupDetails.push({
             group_name: group.group_name,
