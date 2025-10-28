@@ -385,6 +385,28 @@ serve(async (req) => {
               } else {
                 console.error(`no_filter fetch failed: HTTP ${response.status}`);
               }
+
+              // Final fallback: fetch all recent messages globally and filter by remoteJid locally
+              if (messages.length === 0) {
+                try {
+                  const globalResp = await fetch(`${evolutionApiUrl}/messages/fetch/${connection.instance_name}`, {
+                    method: 'GET',
+                    headers: { 'apikey': evolutionApiKey },
+                  });
+                  if (globalResp.ok) {
+                    const globalData = await globalResp.json();
+                    const globalMessages = Array.isArray(globalData) ? globalData : extractMessages(globalData);
+                    const filtered = (globalMessages || []).filter((m: any) => m?.key?.remoteJid === group.group_id);
+                    console.log(`Fetched global and filtered: ${filtered.length} messages for ${group.group_name}`);
+                    messages = filtered;
+                    fetchMethod = 'global_fetch_filter';
+                  } else {
+                    console.error(`global_fetch failed: HTTP ${globalResp.status}`);
+                  }
+                } catch (gerr) {
+                  console.error(`global_fetch error`, gerr);
+                }
+              }
             }
           }
         } catch (fetchError) {
