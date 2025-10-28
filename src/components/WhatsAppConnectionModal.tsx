@@ -71,27 +71,13 @@ export const WhatsAppConnectionModal = ({
 
       if (error) throw error;
 
-      if (data?.connected) {
-        toast.success("WhatsApp já conectado!");
-        onSuccess();
-        onOpenChange(false);
-        return;
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      const qr: string | undefined = data?.qrCode;
-      const instance: string | undefined = data?.instanceId;
-      const expires: string | undefined = data?.expiresAt;
-
-      if (qr && instance) {
-        const formattedQr = qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`;
-        setQrCode(formattedQr);
-        setInstanceId(instance);
-        setExpiresAt(expires ? new Date(expires) : new Date(Date.now() + 60000));
-        return;
-      }
-
-      const message = data?.message || data?.error || 'Não foi possível gerar o QR Code';
-      throw new Error(message);
+      setQrCode(data.qrCode);
+      setInstanceId(data.instanceId);
+      setExpiresAt(new Date(data.expiresAt));
     } catch (err: any) {
       console.error('Error generating QR code:', err);
       setError(err.message || 'Erro ao gerar QR Code');
