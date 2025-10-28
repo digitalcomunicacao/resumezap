@@ -175,21 +175,33 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
           </p>
         </div>
 
-        <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
-          <div className="flex-1 space-y-1">
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <Label htmlFor="send-to-group" className="flex items-center gap-2">
               <Send className="w-4 h-4" />
-              Enviar no Grupo
+              Enviar Resumo no Grupo
             </Label>
-            <p className="text-sm text-muted-foreground">
-              Receber o resumo diretamente no grupo do WhatsApp
+            <Switch
+              id="send-to-group"
+              checked={sendToGroup}
+              onCheckedChange={setSendToGroup}
+            />
+          </div>
+          
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>
+              {sendToGroup 
+                ? "✅ O resumo será postado automaticamente no grupo do WhatsApp no horário configurado."
+                : "📊 O resumo ficará disponível apenas no seu Dashboard (privado)."
+              }
+            </p>
+            <p className="text-xs bg-primary/5 p-2 rounded">
+              💡 <strong>Como funciona:</strong> {sendToGroup 
+                ? "Todos os membros do grupo verão o resumo. Ideal para grupos de trabalho ou comunidades."
+                : "Apenas você verá o resumo aqui no Dashboard. Ideal para grupos pessoais ou sigilosos."
+              }
             </p>
           </div>
-          <Switch
-            id="send-to-group"
-            checked={sendToGroup}
-            onCheckedChange={setSendToGroup}
-          />
         </div>
 
         <Button onClick={handleSave} disabled={saving} className="w-full">

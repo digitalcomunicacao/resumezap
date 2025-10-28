@@ -238,12 +238,11 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     });
   };
 
-  const getDeliveryStatusBadge = (status: string | null | undefined) => {
+  const getDeliveryStatusBadge = (status: string | null | undefined, sendToGroup?: boolean) => {
     if (!status) {
       return (
         <Badge variant="outline" className="gap-1">
-          <Clock className="w-3 h-3" />
-          Pendente
+          🔒 Privado
         </Badge>
       );
     }
@@ -251,8 +250,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     if (status === 'sent') {
       return (
         <Badge variant="default" className="gap-1 bg-green-500">
-          <CheckCircle className="w-3 h-3" />
-          Enviado
+          📤 Enviado no Grupo
         </Badge>
       );
     }
@@ -433,7 +431,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
                           </div>
                           <div className="flex items-center gap-2">
                             {getDeliveryStatusBadge(summary.delivery_status)}
-                            {(!summary.delivery_status || summary.delivery_status === 'failed') && (
+                            {summary.delivery_status !== 'sent' && (
                               <Button
                                 size="sm"
                                 variant="outline"
