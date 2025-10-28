@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO, isToday, isYesterday, isThisWeek, isThisMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { SelectGroupsForSummaryModal } from "./SelectGroupsForSummaryModal";
 
 interface Summary {
   id: string;
@@ -29,12 +30,12 @@ interface SummariesListProps {
 export const SummariesList = ({ userId }: SummariesListProps) => {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set());
   const [dailyUsage, setDailyUsage] = useState(0);
   const [sendingStates, setSendingStates] = useState<Record<string, boolean>>({});
   const [cleaningHistory, setCleaningHistory] = useState(false);
+  const [showSelectGroupsModal, setShowSelectGroupsModal] = useState(false);
   const { subscriptionPlan } = useSubscription();
 
   // Rate limits por plano
@@ -100,64 +101,13 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     }
   };
 
-  const handleGenerateSummaries = async () => {
-    const limit = RATE_LIMITS[subscriptionPlan] ?? 1;
-    
-    if (dailyUsage >= limit) {
-      toast.error(`Limite diário atingido (${limit} resumo${limit > 1 ? 's' : ''}/dia). Faça upgrade para gerar mais!`);
-      return;
-    }
+  const handleOpenSelectGroups = () => {
+    setShowSelectGroupsModal(true);
+  };
 
-    setGenerating(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("Você precisa estar logado");
-        return;
-      }
-
-      // Log manual generation
-      await supabase.from('manual_summary_logs').insert({
-        user_id: userId,
-        subscription_plan: subscriptionPlan,
-      });
-
-      const { data, error } = await supabase.functions.invoke('generate-summaries', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.summaries_count === 0) {
-        const details = data.details || [];
-        const noMessages = details.filter((d: any) => d.reason === 'no_messages').length;
-        const noText = details.filter((d: any) => d.reason === 'no_text_messages').length;
-        
-        let description = "Nenhuma mensagem de texto encontrada no período (últimas 24h).";
-        if (noMessages > 0) {
-          description += ` ${noMessages} grupo(s) sem mensagens.`;
-        }
-        if (noText > 0) {
-          description += ` ${noText} grupo(s) sem mensagens de texto.`;
-        }
-        description += " Dica: envie mensagens no grupo e tente novamente.";
-        
-        toast.info(description);
-      } else {
-        toast.success(`✅ ${data.summaries_count} resumo(s) gerado(s) com sucesso!`);
-      }
-
-      await fetchSummaries();
-      await fetchDailyUsage();
-    } catch (error: any) {
-      console.error("Error generating summaries:", error);
-      toast.error("Erro ao gerar resumos: " + (error.message || "Tente novamente"));
-    } finally {
-      setGenerating(false);
-    }
+  const handleSummarySuccess = async () => {
+    await fetchSummaries();
+    await fetchDailyUsage();
   };
 
   const handleSendToWhatsApp = async (summaryId: string) => {
@@ -330,21 +280,12 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
 
         <div className="flex flex-col gap-2">
           <Button
-            onClick={handleGenerateSummaries}
-            disabled={generating || !canGenerate}
+            onClick={handleOpenSelectGroups}
+            disabled={!canGenerate}
             className="gap-2"
           >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Gerando resumos...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Gerar Resumos Agora
-              </>
-            )}
+            <Sparkles className="w-4 h-4" />
+            Gerar Resumos Agora
           </Button>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {!canGenerate ? (
@@ -360,6 +301,13 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
           </div>
         </div>
       </div>
+
+      <SelectGroupsForSummaryModal
+        isOpen={showSelectGroupsModal}
+        onClose={() => setShowSelectGroupsModal(false)}
+        userId={userId}
+        onSuccess={handleSummarySuccess}
+      />
 
       {Object.keys(groupedSummaries).length === 0 ? (
         <Card className="shadow-soft">

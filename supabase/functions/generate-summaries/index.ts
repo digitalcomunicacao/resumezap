@@ -24,6 +24,7 @@ serve(async (req) => {
     const scheduledUserId = req.headers.get('x-user-id');
     
     let userId: string;
+    let requestBody: any = {};
     
     if (scheduledUserId) {
       // Scheduled task - validate service role key
@@ -52,6 +53,13 @@ serve(async (req) => {
       
       userId = user.id;
       console.log(`Generating summaries for user: ${userId}`);
+      
+      // Get request body to check for selected groups
+      try {
+        requestBody = await req.json();
+      } catch {
+        // No body or invalid JSON, proceed with all groups
+      }
     }
 
     // Get user's WhatsApp connection
@@ -67,11 +75,19 @@ serve(async (req) => {
     }
 
     // Get selected groups
-    const { data: groups, error: groupsError } = await supabase
+    let groupsQuery = supabase
       .from('whatsapp_groups')
       .select('*')
       .eq('user_id', userId)
       .eq('is_selected', true);
+    
+    // Filter by specific group IDs if provided
+    if (requestBody.selectedGroupIds && Array.isArray(requestBody.selectedGroupIds) && requestBody.selectedGroupIds.length > 0) {
+      groupsQuery = groupsQuery.in('group_id', requestBody.selectedGroupIds);
+      console.log(`Filtering to ${requestBody.selectedGroupIds.length} specific groups`);
+    }
+    
+    const { data: groups, error: groupsError } = await groupsQuery;
 
     if (groupsError || !groups || groups.length === 0) {
       throw new Error('No groups selected for summarization');
