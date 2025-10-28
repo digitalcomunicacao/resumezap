@@ -94,17 +94,15 @@ export default function GroupsListModal({
         .from('whatsapp_groups')
         .select('*')
         .eq('user_id', user.id)
-        .order('group_name');
+        .order('is_selected', { ascending: false })
+        .order('participant_count', { ascending: false })
+        .order('group_name', { ascending: true });
 
       if (dbError) throw dbError;
 
-      // If we have groups in DB, show them (ordenados: selecionados primeiro)
+      // If we have groups in DB, show them (já ordenados pela query)
       if (existingGroups && existingGroups.length > 0) {
-        const sortedGroups = [...existingGroups].sort((a, b) => {
-          if (a.is_selected === b.is_selected) return 0;
-          return a.is_selected ? -1 : 1;
-        });
-        setGroups(sortedGroups);
+        setGroups(existingGroups);
       }
 
       // Then fetch fresh groups from WhatsApp in background
@@ -123,10 +121,20 @@ export default function GroupsListModal({
       if (error) throw error;
 
       if (data?.groups) {
-        // Ordenar grupos: selecionados primeiro
+        // Ordenação inteligente: selecionados > mais ativos > alfabético
         const sortedGroups = [...data.groups].sort((a, b) => {
-          if (a.is_selected === b.is_selected) return 0;
-          return a.is_selected ? -1 : 1;
+          // 1º: Grupos selecionados primeiro
+          if (a.is_selected !== b.is_selected) {
+            return a.is_selected ? -1 : 1;
+          }
+          
+          // 2º: Maior número de participantes (mais ativo)
+          if (a.participant_count !== b.participant_count) {
+            return b.participant_count - a.participant_count;
+          }
+          
+          // 3º: Ordem alfabética
+          return a.group_name.localeCompare(b.group_name, 'pt-BR');
         });
         setGroups(sortedGroups);
         
@@ -173,8 +181,18 @@ export default function GroupsListModal({
       g.id === groupId ? { ...g, is_selected: !currentlySelected } : g
     );
     const sortedGroups = [...updatedGroups].sort((a, b) => {
-      if (a.is_selected === b.is_selected) return 0;
-      return a.is_selected ? -1 : 1;
+      // 1º: Grupos selecionados primeiro
+      if (a.is_selected !== b.is_selected) {
+        return a.is_selected ? -1 : 1;
+      }
+      
+      // 2º: Maior número de participantes
+      if (a.participant_count !== b.participant_count) {
+        return b.participant_count - a.participant_count;
+      }
+      
+      // 3º: Ordem alfabética
+      return a.group_name.localeCompare(b.group_name, 'pt-BR');
     });
     setGroups(sortedGroups);
 

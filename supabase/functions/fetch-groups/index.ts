@@ -140,7 +140,9 @@ Deno.serve(async (req) => {
         .from('whatsapp_groups')
         .select('*')
         .eq('user_id', user.id)
-        .order('group_name');
+        .order('is_selected', { ascending: false })
+        .order('participant_count', { ascending: false })
+        .order('group_name', { ascending: true });
         
       if (savedGroups && savedGroups.length > 0) {
         console.log('Returning', savedGroups.length, 'saved groups from database cache');
@@ -203,7 +205,9 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('user_id', user.id)
       .eq('whatsapp_connection_id', connection.id)
-      .order('group_name');
+      .order('is_selected', { ascending: false })
+      .order('participant_count', { ascending: false })
+      .order('group_name', { ascending: true });
 
     if (fetchError) {
       console.error('Error fetching saved groups:', fetchError);
