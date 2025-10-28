@@ -15,6 +15,7 @@ import Admin from "./pages/Admin";
 import Checkout from "./pages/Checkout";
 import Success from "./pages/Success";
 import Qualify from "./pages/Qualify";
+import ConnectWhatsApp from "./pages/ConnectWhatsApp";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +69,7 @@ const AppContent = () => {
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/qualify" element={<Qualify />} />
+          <Route path="/connect-whatsapp" element={<ConnectWhatsApp />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/settings" element={<Settings />} />
