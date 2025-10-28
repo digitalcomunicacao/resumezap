@@ -101,8 +101,8 @@ Deno.serve(async (req) => {
     
     try {
       console.log('Starting Evolution API request...');
-      // First try WITHOUT query params (most compatible)
-      const groupsUrl = `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`;
+      // First try WITH explicit getParticipants=false (required by provider)
+      const groupsUrl = `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=false`;
       console.log('URL:', groupsUrl);
       
       fetchGroupsResponse = await fetch(
@@ -126,125 +126,151 @@ Deno.serve(async (req) => {
           status: fetchGroupsResponse.status,
           error: errorText
         });
-        
-        // Try to derive groups from chats as fallback
-        try {
-          if (!chatsResponse) {
-            chatsResponse = await fetch(
-              `${evolutionApiUrl}/chat/findChats/${connection.instance_name}`,
-              {
-                method: 'GET',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'apikey': evolutionApiKey,
-                }
-              }
-            );
-          }
 
-          if (chatsResponse?.ok) {
-            const chatsData = await chatsResponse.json();
-            const chats = Array.isArray(chatsData) ? chatsData : [];
+        // If API complains about getParticipants, retry with true
+        if (errorText?.includes('getParticipants')) {
+          try {
+            const retryUrl = `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=true`;
+            console.log('Retrying fetchAllGroups with getParticipants=true:', retryUrl);
+            const retryResp = await fetch(retryUrl, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': evolutionApiKey,
+              },
+              signal: controller.signal,
+            });
 
-            const activityMapLocal = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
-            const derivedGroups = chats
-              .filter((chat: any) => (chat.id || chat.jid)?.endsWith('@g.us'))
-              .map((chat: any) => {
-                const jid = chat.id || chat.jid;
-                const lastActivity = chat.conversationTimestamp || chat.lastMessage?.timestamp || chat.t || chat.lastMsg?.t || 0;
-                activityMapLocal.set(jid, {
-                  last_activity: lastActivity,
-                  unread_count: chat.unreadCount || chat.unread || 0,
-                  pinned: chat.pinned || false,
-                });
-                return {
-                  id: jid,
-                  subject: chat.name || chat.formattedTitle || chat.subject || chat.pushname || 'Sem nome',
-                  pictureUrl: chat.profilePicUrl || chat.pic || chat.profilePicThumbObj?.eurl || null,
-                  size: chat.size || chat.participantsCount || 0,
-                };
-              });
-
-            for (const group of derivedGroups) {
-              const groupData = {
-                user_id: user.id,
-                whatsapp_connection_id: connection.id,
-                group_id: group.id,
-                group_name: group.subject,
-                group_image: group.pictureUrl,
-                participant_count: group.size || 0,
-              };
-
-              const { data: existingGroup } = await supabaseClient
-                .from('whatsapp_groups')
-                .select('id, is_selected')
-                .eq('user_id', user.id)
-                .eq('group_id', group.id)
-                .maybeSingle();
-
-              if (existingGroup) {
-                await supabaseClient
-                  .from('whatsapp_groups')
-                  .update({
-                    group_name: groupData.group_name,
-                    group_image: groupData.group_image,
-                    participant_count: groupData.participant_count,
-                  })
-                  .eq('id', existingGroup.id);
-              } else {
-                await supabaseClient
-                  .from('whatsapp_groups')
-                  .insert(groupData);
-              }
+            if (retryResp.ok) {
+              console.log('Retry with getParticipants=true succeeded');
+              fetchGroupsResponse = retryResp; // proceed normally below
             }
-
-            const { data: savedFromChats } = await supabaseClient
-              .from('whatsapp_groups')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('whatsapp_connection_id', connection.id);
-
-            const enriched = (savedFromChats || []).map((g: any) => {
-              const a = activityMapLocal.get(g.group_id);
-              return { ...g, last_activity: a?.last_activity || null, unread_count: a?.unread_count || 0, pinned: a?.pinned || false };
-            });
-
-            enriched.sort((a: any, b: any) => {
-              if (a.is_selected !== b.is_selected) return a.is_selected ? -1 : 1;
-              if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-              if (a.last_activity && b.last_activity) return b.last_activity - a.last_activity;
-              if (a.last_activity && !b.last_activity) return -1;
-              if (!a.last_activity && b.last_activity) return 1;
-              if (a.participant_count !== b.participant_count) return b.participant_count - a.participant_count;
-              return a.group_name.localeCompare(b.group_name, 'pt-BR');
-            });
-
-            return new Response(
-              JSON.stringify({ groups: enriched, message: 'Grupos derivados das conversas (fallback)' }),
-              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+          } catch (retryErr) {
+            console.warn('Retry with getParticipants=true failed:', retryErr);
           }
-        } catch (fallbackErr) {
-          console.warn('Fallback via chats failed:', fallbackErr);
         }
 
-        // Final fallback: DB cache only
-        const { data: savedGroups } = await supabaseClient
-          .from('whatsapp_groups')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('is_selected', { ascending: false })
-          .order('participant_count', { ascending: false })
-          .order('group_name', { ascending: true });
+        // If still not OK after retry, fallback to chats/cache
+        if (!fetchGroupsResponse.ok) {
+          // Try to derive groups from chats as fallback
+          try {
+            if (!chatsResponse) {
+              chatsResponse = await fetch(
+                `${evolutionApiUrl}/chat/findChats/${connection.instance_name}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': evolutionApiKey,
+                  }
+                }
+              );
+            }
 
-        return new Response(
-          JSON.stringify({ 
-            groups: savedGroups || [],
-            warning: 'API retornou erro. Exibindo dados em cache.',
-            message: 'Grupos carregados do cache (API retornou erro)'
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+            if (chatsResponse?.ok) {
+              const chatsData = await chatsResponse.json();
+              const chats = extractArray(chatsData);
+
+              const activityMapLocal = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
+              const derivedGroups = chats
+                .filter((chat: any) => (chat.id || chat.jid)?.endsWith('@g.us'))
+                .map((chat: any) => {
+                  const jid = chat.id || chat.jid;
+                  const lastActivity = chat.conversationTimestamp || chat.lastMessage?.timestamp || chat.t || chat.lastMsg?.t || 0;
+                  activityMapLocal.set(jid, {
+                    last_activity: lastActivity,
+                    unread_count: chat.unreadCount || chat.unread || 0,
+                    pinned: chat.pinned || false,
+                  });
+                  return {
+                    id: jid,
+                    subject: chat.name || chat.formattedTitle || chat.subject || chat.pushname || 'Sem nome',
+                    pictureUrl: chat.profilePicUrl || chat.pic || chat.profilePicThumbObj?.eurl || null,
+                    size: chat.size || chat.participantsCount || 0,
+                  };
+                });
+
+              for (const group of derivedGroups) {
+                const groupData = {
+                  user_id: user.id,
+                  whatsapp_connection_id: connection.id,
+                  group_id: group.id,
+                  group_name: group.subject,
+                  group_image: group.pictureUrl,
+                  participant_count: group.size || 0,
+                };
+
+                const { data: existingGroup } = await supabaseClient
+                  .from('whatsapp_groups')
+                  .select('id, is_selected')
+                  .eq('user_id', user.id)
+                  .eq('group_id', group.id)
+                  .maybeSingle();
+
+                if (existingGroup) {
+                  await supabaseClient
+                    .from('whatsapp_groups')
+                    .update({
+                      group_name: groupData.group_name,
+                      group_image: groupData.group_image,
+                      participant_count: groupData.participant_count,
+                    })
+                    .eq('id', existingGroup.id);
+                } else {
+                  await supabaseClient
+                    .from('whatsapp_groups')
+                    .insert(groupData);
+                }
+              }
+
+              const { data: savedFromChats } = await supabaseClient
+                .from('whatsapp_groups')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('whatsapp_connection_id', connection.id);
+
+              const enriched = (savedFromChats || []).map((g: any) => {
+                const a = activityMapLocal.get(g.group_id);
+                return { ...g, last_activity: a?.last_activity || null, unread_count: a?.unread_count || 0, pinned: a?.pinned || false };
+              });
+
+              enriched.sort((a: any, b: any) => {
+                if (a.is_selected !== b.is_selected) return a.is_selected ? -1 : 1;
+                if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+                if (a.last_activity && b.last_activity) return b.last_activity - a.last_activity;
+                if (a.last_activity && !b.last_activity) return -1;
+                if (!a.last_activity && b.last_activity) return 1;
+                if (a.participant_count !== b.participant_count) return b.participant_count - a.participant_count;
+                return a.group_name.localeCompare(b.group_name, 'pt-BR');
+              });
+
+              return new Response(
+                JSON.stringify({ groups: enriched, message: 'Grupos derivados das conversas (fallback)' }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+          } catch (fallbackErr) {
+            console.warn('Fallback via chats failed:', fallbackErr);
+          }
+
+          // Final fallback: DB cache only
+          const { data: savedGroups } = await supabaseClient
+            .from('whatsapp_groups')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('is_selected', { ascending: false })
+            .order('participant_count', { ascending: false })
+            .order('group_name', { ascending: true });
+
+          return new Response(
+            JSON.stringify({ 
+              groups: savedGroups || [],
+              warning: 'API retornou erro. Exibindo dados em cache.',
+              message: 'Grupos carregados do cache (API retornou erro)'
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
       
       // Also fetch chats to get activity data
