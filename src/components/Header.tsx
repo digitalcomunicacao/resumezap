@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export const Header = () => {
   const navigate = useNavigate();
@@ -40,8 +39,7 @@ export const Header = () => {
           </a>
         </nav>
         
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
+        <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={handleStartClick}>
             Entrar
           </Button>

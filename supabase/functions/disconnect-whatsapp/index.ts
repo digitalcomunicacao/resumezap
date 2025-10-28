@@ -66,93 +66,31 @@ serve(async (req) => {
       console.error('Evolution API delete error:', await deleteResponse.text());
     }
 
-    // Deletar histórico do usuário antes de desconectar
-    console.log('Deleting user history for user:', user.id);
-
-    // 1. Deletar deliveries de resumos
-    const { error: deliveriesError } = await supabase
-      .from('summary_deliveries')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (deliveriesError) {
-      console.error('Error deleting summary deliveries:', deliveriesError);
-    }
-
-    // 2. Deletar resumos
-    const { error: summariesError } = await supabase
-      .from('summaries')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (summariesError) {
-      console.error('Error deleting summaries:', summariesError);
-    }
-
-    // 3. Deletar grupos WhatsApp
-    const { error: groupsError } = await supabase
-      .from('whatsapp_groups')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (groupsError) {
-      console.error('Error deleting whatsapp groups:', groupsError);
-    }
-
-    // 4. Deletar analytics de mensagens
-    const { error: analyticsError } = await supabase
-      .from('message_analytics')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (analyticsError) {
-      console.error('Error deleting message analytics:', analyticsError);
-    }
-
-    // 5. Deletar preferências de resumo
-    const { error: preferencesError } = await supabase
-      .from('summary_preferences')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (preferencesError) {
-      console.error('Error deleting summary preferences:', preferencesError);
-    }
-
-    // 6. Deletar logs de resumos manuais
-    const { error: logsError } = await supabase
-      .from('manual_summary_logs')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (logsError) {
-      console.error('Error deleting manual summary logs:', logsError);
-    }
-
-    // 7. Deletar conexão WhatsApp
-    const { error: connectionError } = await supabase
+    // Update database
+    const { error: updateError } = await supabase
       .from('whatsapp_connections')
-      .delete()
+      .update({
+        status: 'disconnected',
+        updated_at: new Date().toISOString(),
+      })
       .eq('instance_id', instanceId)
       .eq('user_id', user.id);
 
-    if (connectionError) {
-      console.error('Error deleting whatsapp connection:', connectionError);
+    if (updateError) {
+      console.error('Database update error:', updateError);
     }
 
-    // 8. Atualizar profile
+    // Update profile
     await supabase
       .from('profiles')
       .update({
         whatsapp_connected: false,
         whatsapp_instance_id: null,
-        selected_groups_count: 0,
-        total_summaries_generated: 0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);
 
-    console.log('WhatsApp disconnected and user history cleaned successfully');
+    console.log('WhatsApp disconnected successfully');
 
     return new Response(
       JSON.stringify({ success: true }),

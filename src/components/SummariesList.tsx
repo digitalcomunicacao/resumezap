@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles, Download, AlertCircle, Send, CheckCircle, XCircle, Clock, Trash2 } from "lucide-react";
+import { Loader2, MessageSquare, Calendar, ChevronDown, ChevronUp, Sparkles, Download, AlertCircle, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,16 +34,14 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set());
   const [dailyUsage, setDailyUsage] = useState(0);
   const [sendingStates, setSendingStates] = useState<Record<string, boolean>>({});
-  const [cleaningHistory, setCleaningHistory] = useState(false);
   const { subscriptionPlan } = useSubscription();
 
   // Rate limits por plano
-  const RATE_LIMITS: Record<string, number> = {
+  const RATE_LIMITS = {
     free: 1,
     basic: 5,
     pro: 999999,
     premium: 999999,
-    enterprise: 999999,
   };
 
   const fetchSummaries = async () => {
@@ -81,7 +79,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   useEffect(() => {
     fetchSummaries();
     fetchDailyUsage();
-  }, [userId, subscriptionPlan]);
+  }, [userId]);
 
   const fetchDailyUsage = async () => {
     if (!userId) return;
@@ -91,7 +89,6 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
       .from('manual_summary_logs')
       .select('id')
       .eq('user_id', userId)
-      .eq('subscription_plan', subscriptionPlan)
       .gte('generated_at', `${today}T00:00:00`)
       .lte('generated_at', `${today}T23:59:59`);
 
@@ -101,7 +98,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
   };
 
   const handleGenerateSummaries = async () => {
-    const limit = RATE_LIMITS[subscriptionPlan] ?? 1;
+    const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
     
     if (dailyUsage >= limit) {
       toast.error(`Limite diário atingido (${limit} resumo${limit > 1 ? 's' : ''}/dia). Faça upgrade para gerar mais!`);
@@ -194,38 +191,6 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     }
   };
 
-  const handleCleanHistory = async () => {
-    if (!confirm('⚠️ Tem certeza que deseja limpar todo o histórico? Esta ação não pode ser desfeita.')) {
-      return;
-    }
-
-    setCleaningHistory(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error("Você precisa estar logado");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('cleanup-user-data', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      toast.success("Histórico limpo com sucesso!");
-      await fetchSummaries();
-    } catch (error: any) {
-      console.error("Error cleaning history:", error);
-      toast.error(error.message || "Erro ao limpar histórico");
-    } finally {
-      setCleaningHistory(false);
-    }
-  };
-
   const toggleExpand = (summaryId: string) => {
     setExpandedSummaries(prev => {
       const newSet = new Set(prev);
@@ -238,11 +203,12 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     });
   };
 
-  const getDeliveryStatusBadge = (status: string | null | undefined, sendToGroup?: boolean) => {
+  const getDeliveryStatusBadge = (status: string | null | undefined) => {
     if (!status) {
       return (
         <Badge variant="outline" className="gap-1">
-          🔒 Privado
+          <Clock className="w-3 h-3" />
+          Pendente
         </Badge>
       );
     }
@@ -250,7 +216,8 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     if (status === 'sent') {
       return (
         <Badge variant="default" className="gap-1 bg-green-500">
-          📤 Enviado no Grupo
+          <CheckCircle className="w-3 h-3" />
+          Enviado
         </Badge>
       );
     }
@@ -307,7 +274,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
     );
   }
 
-  const limit = RATE_LIMITS[subscriptionPlan] ?? 1;
+  const limit = RATE_LIMITS[subscriptionPlan as keyof typeof RATE_LIMITS];
   const canGenerate = dailyUsage < limit;
 
   return (
@@ -373,28 +340,6 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
         </Card>
       ) : (
         <div className="space-y-6">
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCleanHistory}
-              disabled={cleaningHistory}
-              className="gap-2 text-destructive hover:text-destructive"
-            >
-              {cleaningHistory ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Limpando...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4" />
-                  Limpar Histórico
-                </>
-              )}
-            </Button>
-          </div>
-
           {Object.entries(groupedSummaries).map(([date, dateSummaries]) => (
             <div key={date} className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -431,7 +376,7 @@ export const SummariesList = ({ userId }: SummariesListProps) => {
                           </div>
                           <div className="flex items-center gap-2">
                             {getDeliveryStatusBadge(summary.delivery_status)}
-                            {summary.delivery_status !== 'sent' && (
+                            {(!summary.delivery_status || summary.delivery_status === 'failed') && (
                               <Button
                                 size="sm"
                                 variant="outline"

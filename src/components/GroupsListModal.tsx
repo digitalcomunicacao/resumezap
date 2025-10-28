@@ -85,26 +85,17 @@ export default function GroupsListModal({
     setError(null);
 
     try {
-      // Buscar o usuário autenticado
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Não autenticado');
-
-      // First, try to get existing groups from database (apenas do usuário logado)
+      // First, try to get existing groups from database
       const { data: existingGroups, error: dbError } = await supabase
         .from('whatsapp_groups')
         .select('*')
-        .eq('user_id', user.id)
         .order('group_name');
 
       if (dbError) throw dbError;
 
-      // If we have groups in DB, show them (ordenados: selecionados primeiro)
+      // If we have groups in DB, show them
       if (existingGroups && existingGroups.length > 0) {
-        const sortedGroups = [...existingGroups].sort((a, b) => {
-          if (a.is_selected === b.is_selected) return 0;
-          return a.is_selected ? -1 : 1;
-        });
-        setGroups(sortedGroups);
+        setGroups(existingGroups);
       }
 
       // Then fetch fresh groups from WhatsApp in background
@@ -123,12 +114,7 @@ export default function GroupsListModal({
       if (error) throw error;
 
       if (data?.groups) {
-        // Ordenar grupos: selecionados primeiro
-        const sortedGroups = [...data.groups].sort((a, b) => {
-          if (a.is_selected === b.is_selected) return 0;
-          return a.is_selected ? -1 : 1;
-        });
-        setGroups(sortedGroups);
+        setGroups(data.groups);
         toast({
           title: "Grupos sincronizados",
           description: `${data.groups.length} grupos encontrados`,
@@ -155,15 +141,10 @@ export default function GroupsListModal({
       return;
     }
 
-    // Optimistic update e reordenar
-    const updatedGroups = groups.map(g => 
+    // Optimistic update
+    setGroups(groups.map(g => 
       g.id === groupId ? { ...g, is_selected: !currentlySelected } : g
-    );
-    const sortedGroups = [...updatedGroups].sort((a, b) => {
-      if (a.is_selected === b.is_selected) return 0;
-      return a.is_selected ? -1 : 1;
-    });
-    setGroups(sortedGroups);
+    ));
 
     try {
       const { error } = await supabase

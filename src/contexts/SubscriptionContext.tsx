@@ -32,13 +32,6 @@ export const STRIPE_PLANS = {
     groups_limit: 20,
     price: 97,
   },
-  enterprise: {
-    name: 'Enterprise',
-    price_id: null,
-    product_id: null,
-    groups_limit: 999,
-    price: 0,
-  },
 } as const;
 
 export type SubscriptionPlan = keyof typeof STRIPE_PLANS;
@@ -152,10 +145,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     if (profile?.manual_groups_limit !== null && profile?.manual_groups_limit !== undefined) {
       return profile.manual_groups_limit;
     }
-    
-    // Garantir que o plano existe no STRIPE_PLANS
-    const plan = STRIPE_PLANS[subscriptionPlan as keyof typeof STRIPE_PLANS];
-    return plan?.groups_limit ?? 1; // Default para 1 se não encontrar
+    return STRIPE_PLANS[subscriptionPlan].groups_limit;
   }, [profile, subscriptionPlan]);
 
   return (
