@@ -80,19 +80,19 @@ export default function GroupsListModal({
     }
   };
 
-  const fetchGroups = async () => {
+  const fetchGroupsWithRetry = async (retryCount = 0): Promise<void> => {
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1s
+    
     const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30s timeout
-
-    setLoading(true);
-    setError(null);
+    const timeoutId = setTimeout(() => abortController.abort(), 45000); // 45s timeout
 
     try {
-      // Buscar o usuário autenticado
+      // Verificar usuário autenticado
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Não autenticado');
 
-      // First, try to get existing groups from database (apenas do usuário logado)
+      // Carregar grupos do banco local primeiro
       const { data: existingGroups, error: dbError } = await supabase
         .from('whatsapp_groups')
         .select('*')
@@ -101,7 +101,6 @@ export default function GroupsListModal({
 
       if (dbError) throw dbError;
 
-      // If we have groups in DB, show them (ordenados: selecionados primeiro)
       if (existingGroups && existingGroups.length > 0) {
         const sortedGroups = [...existingGroups].sort((a, b) => {
           if (a.is_selected === b.is_selected) return 0;
@@ -110,19 +109,22 @@ export default function GroupsListModal({
         setGroups(sortedGroups);
       }
 
-      // Then fetch fresh groups from WhatsApp with timeout
+      // Sincronizar com WhatsApp
+      const retryMsg = retryCount > 0 ? ` (Tentativa ${retryCount + 1} de ${maxRetries})` : '';
       toast({
         title: "Sincronizando grupos",
-        description: "Buscando grupos do WhatsApp...",
+        description: `Buscando grupos do WhatsApp...${retryMsg}`,
       });
 
+      // Verificar sessão válida
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('Não autenticado');
+      if (!session?.access_token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
       }
 
+      console.log(`[Sync] Starting attempt ${retryCount + 1}/${maxRetries}`);
       const syncStart = Date.now();
+
       const { data, error } = await supabase.functions.invoke('fetch-groups', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -135,39 +137,64 @@ export default function GroupsListModal({
 
       if (error) {
         if (error.message?.includes('aborted')) {
-          throw new Error('Sincronização cancelada por timeout (30s). Tente novamente.');
+          throw new Error(`Timeout após 45s. ${maxRetries - retryCount - 1} tentativas restantes.`);
         }
         throw error;
       }
 
       if (data?.groups) {
         const syncTime = Date.now() - syncStart;
-        
-        // Ordenar grupos: selecionados primeiro
         const sortedGroups = [...data.groups].sort((a, b) => {
           if (a.is_selected === b.is_selected) return 0;
           return a.is_selected ? -1 : 1;
         });
-        setGroups(sortedGroups);
         
-        console.log('Sync performance:', data.performance);
+        setGroups(sortedGroups);
+        console.log('[Sync] Success:', data.performance);
         
         toast({
-          title: "Grupos sincronizados com sucesso",
+          title: "Grupos sincronizados",
           description: `${data.groups.length} grupos em ${(syncTime / 1000).toFixed(1)}s`,
         });
       }
 
     } catch (err: any) {
-      console.error('Error fetching groups:', err);
-      setError(err.message || 'Erro ao buscar grupos');
+      clearTimeout(timeoutId);
+      console.error(`[Sync] Error on attempt ${retryCount + 1}:`, err);
+
+      // Retry logic
+      if (retryCount < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, retryCount);
+        console.log(`[Sync] Retrying in ${delay}ms...`);
+        
+        toast({
+          title: `Tentando novamente em ${delay / 1000}s...`,
+          description: `Tentativa ${retryCount + 2} de ${maxRetries}`,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchGroupsWithRetry(retryCount + 1);
+      }
+
+      // Falhou após todas as tentativas
+      setError(err.message || 'Erro ao sincronizar');
       toast({
-        title: "Erro ao sincronizar grupos",
-        description: err.message || "Erro ao buscar grupos do WhatsApp",
+        title: "Erro ao sincronizar",
+        description: groups.length > 0 
+          ? "Mostrando grupos salvos. Tente sincronizar novamente."
+          : err.message || "Erro ao buscar grupos",
         variant: "destructive",
       });
+    }
+  };
+
+  const fetchGroups = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await fetchGroupsWithRetry();
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
