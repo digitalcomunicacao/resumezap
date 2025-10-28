@@ -80,12 +80,14 @@ Deno.serve(async (req) => {
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
 
     let fetchGroupsResponse;
+    let chatsResponse;
+    
     try {
       console.log('Starting Evolution API request...');
-      console.log('URL:', `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`);
+      console.log('URL:', `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=false`);
       
       fetchGroupsResponse = await fetch(
-        `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`,
+        `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=false`,
         {
           method: 'GET',
           headers: {
@@ -96,9 +98,61 @@ Deno.serve(async (req) => {
         }
       );
       
-      clearTimeout(timeoutId);
       console.log('Evolution API response status:', fetchGroupsResponse.status);
       console.log('Evolution API response ok:', fetchGroupsResponse.ok);
+      
+      if (!fetchGroupsResponse.ok) {
+        const errorText = await fetchGroupsResponse.text();
+        console.error('Evolution API error:', {
+          status: fetchGroupsResponse.status,
+          error: errorText
+        });
+        
+        // Parse error message to return to frontend
+        let errorMessage = 'Erro ao buscar grupos do WhatsApp';
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.response?.message) {
+            errorMessage = Array.isArray(errorJson.response.message) 
+              ? errorJson.response.message.join(', ')
+              : errorJson.response.message;
+          } else if (errorJson.error) {
+            errorMessage = errorJson.error;
+          }
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            error: errorMessage,
+            details: errorText 
+          }),
+          { status: fetchGroupsResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Also fetch chats to get activity data
+      console.log('Fetching chats for activity ordering...');
+      try {
+        chatsResponse = await fetch(
+          `${evolutionApiUrl}/chat/findChats/${connection.instance_name}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': evolutionApiKey,
+            },
+            signal: controller.signal,
+          }
+        );
+        console.log('Chats API response status:', chatsResponse.status);
+      } catch (chatError) {
+        console.warn('Failed to fetch chats (non-critical):', chatError);
+        chatsResponse = null;
+      }
+      
+      clearTimeout(timeoutId);
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
@@ -114,20 +168,40 @@ Deno.serve(async (req) => {
       throw error;
     }
 
-    if (!fetchGroupsResponse.ok) {
-      const errorText = await fetchGroupsResponse.text();
-      console.error('Evolution API error:', {
-        status: fetchGroupsResponse.status,
-        error: errorText
-      });
-      return new Response(
-        JSON.stringify({ error: 'Erro ao buscar grupos do WhatsApp' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const groupsData = await fetchGroupsResponse.json();
     console.log('Groups fetched from Evolution API:', groupsData.length || 0, 'groups');
+    
+    // Build activity map from chats
+    const activityMap = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
+    if (chatsResponse?.ok) {
+      try {
+        const chatsData = await chatsResponse.json();
+        const chats = Array.isArray(chatsData) ? chatsData : [];
+        console.log('Chats fetched:', chats.length);
+        
+        for (const chat of chats) {
+          const chatId = chat.id || chat.jid;
+          // Only process group chats
+          if (chatId && chatId.endsWith('@g.us')) {
+            const lastActivity = 
+              chat.conversationTimestamp || 
+              chat.lastMessage?.timestamp || 
+              chat.t || 
+              chat.lastMsg?.t || 
+              0;
+            
+            activityMap.set(chatId, {
+              last_activity: lastActivity,
+              unread_count: chat.unreadCount || chat.unread || 0,
+              pinned: chat.pinned || false
+            });
+          }
+        }
+        console.log('Activity map built with', activityMap.size, 'group chats');
+      } catch (chatError) {
+        console.warn('Error parsing chats data:', chatError);
+      }
+    }
 
     // Process and save groups
     const groups = Array.isArray(groupsData) ? groupsData : [];
@@ -204,10 +278,7 @@ Deno.serve(async (req) => {
       .from('whatsapp_groups')
       .select('*')
       .eq('user_id', user.id)
-      .eq('whatsapp_connection_id', connection.id)
-      .order('is_selected', { ascending: false })
-      .order('participant_count', { ascending: false })
-      .order('group_name', { ascending: true });
+      .eq('whatsapp_connection_id', connection.id);
 
     if (fetchError) {
       console.error('Error fetching saved groups:', fetchError);
@@ -217,10 +288,49 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Successfully fetched and saved', savedGroups?.length || 0, 'groups');
+    // Enrich groups with activity data and sort intelligently
+    const enrichedGroups = (savedGroups || []).map(group => {
+      const activity = activityMap.get(group.group_id);
+      return {
+        ...group,
+        last_activity: activity?.last_activity || null,
+        unread_count: activity?.unread_count || 0,
+        pinned: activity?.pinned || false
+      };
+    });
+
+    // Sort by: is_selected > pinned > last_activity > participant_count > group_name
+    enrichedGroups.sort((a, b) => {
+      // 1. Selected groups first
+      if (a.is_selected !== b.is_selected) {
+        return a.is_selected ? -1 : 1;
+      }
+      
+      // 2. Pinned groups
+      if (a.pinned !== b.pinned) {
+        return a.pinned ? -1 : 1;
+      }
+      
+      // 3. Most recent activity (WhatsApp order)
+      if (a.last_activity && b.last_activity) {
+        return b.last_activity - a.last_activity;
+      }
+      if (a.last_activity && !b.last_activity) return -1;
+      if (!a.last_activity && b.last_activity) return 1;
+      
+      // 4. More participants
+      if (a.participant_count !== b.participant_count) {
+        return b.participant_count - a.participant_count;
+      }
+      
+      // 5. Alphabetical
+      return a.group_name.localeCompare(b.group_name, 'pt-BR');
+    });
+
+    console.log('Successfully fetched and sorted', enrichedGroups.length, 'groups');
 
     return new Response(
-      JSON.stringify({ groups: savedGroups || [] }),
+      JSON.stringify({ groups: enrichedGroups }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
