@@ -9,7 +9,7 @@ import { useQualificationCheck } from "@/hooks/useQualificationCheck";
 import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-
+import { WhatsAppConnectionModal } from "@/components/WhatsAppConnectionModal";
 import GroupsListModal from "@/components/GroupsListModal";
 import { SummariesList } from "@/components/SummariesList";
 import { useSubscription, STRIPE_PLANS } from "@/contexts/SubscriptionContext";
@@ -26,7 +26,7 @@ const Dashboard = () => {
   const { isQualified, loading: qualificationLoading } = useQualificationCheck();
   const [profile, setProfile] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
-  
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
@@ -116,7 +116,7 @@ const Dashboard = () => {
   };
 
   const handleWhatsAppConnect = () => {
-    navigate("/connect-whatsapp");
+    setShowConnectionModal(true);
   };
 
   const handleGenerateSummaries = async () => {
@@ -385,6 +385,12 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
+
+      <WhatsAppConnectionModal
+        open={showConnectionModal}
+        onOpenChange={setShowConnectionModal}
+        onSuccess={handleConnectionSuccess}
+      />
 
       <GroupsListModal
         open={showGroupsModal}
