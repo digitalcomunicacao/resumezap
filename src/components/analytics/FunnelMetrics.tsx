@@ -12,7 +12,14 @@ import {
   CreditCard,
   ArrowDownRight
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  FunnelChart,
+  Funnel,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  LabelList
+} from 'recharts';
 
 interface FunnelStage {
   name: string;
@@ -24,10 +31,10 @@ interface FunnelStage {
 }
 
 const COLORS = {
-  visitors: '#25D366',    // WhatsApp green bright
-  signups: '#128C7E',     // WhatsApp green medium
-  whatsapp: '#075E54',    // WhatsApp green dark
-  subscribers: '#34B7F1', // WhatsApp blue
+  visitors: 'hsl(142 76% 56%)',
+  signups: 'hsl(142 70% 45%)',
+  whatsapp: 'hsl(174 84% 35%)',
+  subscribers: 'hsl(142 76% 30%)',
 };
 
 export function FunnelMetrics() {
@@ -109,6 +116,39 @@ export function FunnelMetrics() {
     };
   }, []);
 
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const Icon = data.icon;
+      
+      return (
+        <Card className="shadow-lg border-2">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon className="w-4 h-4" style={{ color: data.fill }} />
+              <p className="font-semibold text-sm">{data.name}</p>
+            </div>
+            <p className="text-3xl font-bold mb-2" style={{ color: data.fill }}>
+              {data.value.toLocaleString()}
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Do total</span>
+                <span className="font-semibold">{data.percentage.toFixed(1)}%</span>
+              </div>
+              {data.conversionRate !== undefined && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Taxa de conversão</span>
+                  <span className="font-semibold">{data.conversionRate.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
+  };
 
   if (loading) {
     return (
@@ -143,90 +183,32 @@ export function FunnelMetrics() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Custom Funnel Visualization */}
-        <div className="mb-8 px-2 md:px-4">
-          <div className="space-y-3">
-            {stages.map((stage, index) => {
-              const Icon = stage.icon;
-              const isLast = index === stages.length - 1;
-              const maxValue = stages[0]?.value || 1;
-              const widthPercentage = Math.max((stage.value / maxValue) * 100, 25);
-              
-              return (
-                <div key={stage.name} className="space-y-2">
-                  {/* Stage Bar Container */}
-                  <div className="relative">
-                    <div 
-                      className={cn(
-                        "relative overflow-hidden rounded-xl transition-all duration-700 ease-out",
-                        "hover:scale-[1.02] hover:shadow-2xl cursor-pointer group",
-                        "border-2 border-white/10",
-                        "animate-fade-in"
-                      )}
-                      style={{
-                        width: `${widthPercentage}%`,
-                        minWidth: '280px',
-                        background: `linear-gradient(135deg, ${stage.fill} 0%, ${stage.fill}dd 100%)`,
-                        boxShadow: `0 8px 24px ${stage.fill}40, 0 4px 8px ${stage.fill}20`,
-                        animationDelay: `${index * 150}ms`
-                      }}
-                    >
-                      {/* Shine effect on hover */}
-                      <div 
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent 
-                                   -translate-x-full group-hover:translate-x-full transition-transform duration-1000"
-                      />
-                      
-                      {/* Content */}
-                      <div className="relative flex items-center justify-between px-4 md:px-6 py-4 gap-3">
-                        {/* Left: Icon + Name */}
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="p-2.5 rounded-xl bg-white/30 backdrop-blur-sm flex-shrink-0 
-                                        shadow-lg group-hover:bg-white/40 transition-colors">
-                            <Icon className="w-5 h-5 md:w-6 md:h-6 text-white drop-shadow-md" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm md:text-base font-bold text-white drop-shadow-md truncate">
-                              {stage.name}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Right: Stats */}
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <p className="text-2xl md:text-3xl font-black text-white drop-shadow-lg">
-                            {stage.value.toLocaleString()}
-                          </p>
-                          <p className="text-xs md:text-sm font-semibold text-white/90 drop-shadow">
-                            {stage.percentage.toFixed(1)}% do total
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Conversion Arrow Between Stages */}
-                  {!isLast && stage.conversionRate !== undefined && (
-                    <div 
-                      className="flex items-center gap-2 pl-6 md:pl-10 py-1 animate-fade-in"
-                      style={{ animationDelay: `${index * 150 + 75}ms` }}
-                    >
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full 
-                                    bg-muted/50 border border-border/50">
-                        <ArrowDownRight className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-semibold text-foreground">
-                          {stage.conversionRate.toFixed(1)}% convertem
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        {/* Recharts Funnel Visualization */}
+        <div className="mb-6">
+          <ResponsiveContainer width="100%" height={400}>
+            <FunnelChart>
+              <Tooltip content={<CustomTooltip />} />
+              <Funnel
+                dataKey="value"
+                data={stages}
+                isAnimationActive
+              >
+                <LabelList 
+                  position="inside" 
+                  fill="#fff" 
+                  stroke="none" 
+                  dataKey="name" 
+                  style={{ fontSize: '14px', fontWeight: 600 }}
+                />
+                {stages.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Funnel>
+            </FunnelChart>
+          </ResponsiveContainer>
         </div>
 
-        <Separator className="my-8" />
+        <Separator className="my-6" />
 
         {/* Métricas Chave */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

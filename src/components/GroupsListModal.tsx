@@ -8,7 +8,6 @@ import { Loader2, Users, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { UpgradeModal } from "./UpgradeModal";
-import { GroupCard } from "./GroupCard";
 
 interface Group {
   id: string;
@@ -17,9 +16,6 @@ interface Group {
   group_image: string | null;
   participant_count: number;
   is_selected: boolean;
-  last_activity?: number | null;
-  unread_count?: number;
-  pinned?: boolean;
 }
 
 interface GroupsListModalProps {
@@ -98,15 +94,17 @@ export default function GroupsListModal({
         .from('whatsapp_groups')
         .select('*')
         .eq('user_id', user.id)
-        .order('is_selected', { ascending: false })
-        .order('participant_count', { ascending: false })
-        .order('group_name', { ascending: true });
+        .order('group_name');
 
       if (dbError) throw dbError;
 
-      // If we have groups in DB, show them (já ordenados pela query)
+      // If we have groups in DB, show them (ordenados: selecionados primeiro)
       if (existingGroups && existingGroups.length > 0) {
-        setGroups(existingGroups);
+        const sortedGroups = [...existingGroups].sort((a, b) => {
+          if (a.is_selected === b.is_selected) return 0;
+          return a.is_selected ? -1 : 1;
+        });
+        setGroups(sortedGroups);
       }
 
       // Then fetch fresh groups from WhatsApp in background
@@ -125,36 +123,25 @@ export default function GroupsListModal({
       if (error) throw error;
 
       if (data?.groups) {
-        // Backend já retorna ordenado: is_selected > pinned > last_activity > participant_count > nome
-        setGroups(data.groups);
-        
-        // Show if loaded from cache
-        const isCache = data.message?.includes('cache');
+        // Ordenar grupos: selecionados primeiro
+        const sortedGroups = [...data.groups].sort((a, b) => {
+          if (a.is_selected === b.is_selected) return 0;
+          return a.is_selected ? -1 : 1;
+        });
+        setGroups(sortedGroups);
         toast({
-          title: isCache ? "Grupos do cache" : "Grupos sincronizados",
-          description: `${data.groups.length} grupos ${isCache ? 'carregados' : 'encontrados'}`,
-          duration: isCache ? 3000 : 2000,
+          title: "Grupos sincronizados",
+          description: `${data.groups.length} grupos encontrados`,
         });
       }
 
     } catch (err: any) {
       console.error('Error fetching groups:', err);
-      
-      // Parse detailed error message from backend
-      let errorMessage = "Erro ao buscar grupos do WhatsApp";
-      
-      if (err.message?.includes('Timeout') || err.message?.includes('timeout')) {
-        errorMessage = "A busca está demorando muito. Isso pode acontecer se você tem muitos grupos. Tente novamente em alguns minutos.";
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
+      setError(err.message || 'Erro ao buscar grupos');
       toast({
-        title: "Erro ao sincronizar",
-        description: errorMessage,
+        title: "Erro",
+        description: err.message || "Erro ao buscar grupos do WhatsApp",
         variant: "destructive",
-        duration: 5000,
       });
     } finally {
       setLoading(false);
@@ -172,33 +159,9 @@ export default function GroupsListModal({
     const updatedGroups = groups.map(g => 
       g.id === groupId ? { ...g, is_selected: !currentlySelected } : g
     );
-    
-    // Re-sort maintaining same priority as backend
     const sortedGroups = [...updatedGroups].sort((a, b) => {
-      // 1. Selected groups first
-      if (a.is_selected !== b.is_selected) {
-        return a.is_selected ? -1 : 1;
-      }
-      
-      // 2. Pinned groups
-      if (a.pinned !== b.pinned) {
-        return a.pinned ? -1 : 1;
-      }
-      
-      // 3. Most recent activity
-      if (a.last_activity && b.last_activity) {
-        return b.last_activity - a.last_activity;
-      }
-      if (a.last_activity && !b.last_activity) return -1;
-      if (!a.last_activity && b.last_activity) return 1;
-      
-      // 4. More participants
-      if (a.participant_count !== b.participant_count) {
-        return b.participant_count - a.participant_count;
-      }
-      
-      // 5. Alphabetical
-      return a.group_name.localeCompare(b.group_name, 'pt-BR');
+      if (a.is_selected === b.is_selected) return 0;
+      return a.is_selected ? -1 : 1;
     });
     setGroups(sortedGroups);
 
@@ -296,7 +259,7 @@ export default function GroupsListModal({
           </div>
 
           {/* Groups list */}
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2">
             {loading && groups.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -319,47 +282,57 @@ export default function GroupsListModal({
                 <p className="text-muted-foreground">Nenhum grupo encontrado</p>
               </div>
             ) : (
-              <>
-                {/* Sugestões Section */}
-                {(groups.filter(g => g.is_selected).length > 0 || groups.some(g => g.last_activity)) && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-muted-foreground px-1">
-                      ✨ Sugestões
-                    </h3>
-                    
-                    {/* Top suggestions: selected + most active */}
-                    {[
-                      ...groups.filter(g => g.is_selected).slice(0, 3),
-                      ...groups
-                        .filter(g => !g.is_selected && g.last_activity)
-                        .slice(0, Math.max(0, 3 - groups.filter(g => g.is_selected).length))
-                    ].map((group) => (
-                      <GroupCard 
-                        key={group.id} 
-                        group={group}
-                        onToggle={toggleGroupSelection}
-                        disabled={!group.is_selected && limitReached}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* All Groups Section */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground px-1">
-                    Todos os grupos
-                  </h3>
-                  
-                  {groups.map((group) => (
-                    <GroupCard 
-                      key={group.id} 
-                      group={group}
-                      onToggle={toggleGroupSelection}
-                      disabled={!group.is_selected && limitReached}
+              groups.map((group) => {
+                const isDisabled = !group.is_selected && limitReached;
+                
+                return (
+                  <div
+                    key={group.id}
+                    className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
+                      group.is_selected 
+                        ? 'border-primary bg-primary/5' 
+                        : isDisabled
+                        ? 'border-muted bg-muted/30 opacity-60'
+                        : 'border-border hover:border-primary/50 hover:bg-accent'
+                    }`}
+                  >
+                    <Checkbox
+                      id={group.id}
+                      checked={group.is_selected}
+                      onCheckedChange={() => toggleGroupSelection(group.id, group.is_selected)}
+                      disabled={isDisabled}
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     />
-                  ))}
-                </div>
-              </>
+                    
+                    <div className="flex items-center gap-3 flex-1">
+                      {group.group_image ? (
+                        <img
+                          src={group.group_image}
+                          alt={group.group_name}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Users className="h-5 w-5 text-primary" />
+                        </div>
+                      )}
+                      
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{group.group_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {group.participant_count} membro{group.participant_count !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+
+                      {isDisabled && (
+                        <span className="text-xs text-muted-foreground">
+                          Limite atingido
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
 
