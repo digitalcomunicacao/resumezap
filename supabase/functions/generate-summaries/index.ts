@@ -105,11 +105,12 @@ serve(async (req) => {
     const timestampFromSeconds = Math.floor(searchWindowStart.getTime() / 1000);
     const timestampFromMs = searchWindowStart.getTime();
     
-    // Calcular "ontem" no fuso do usuário
-    const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const yesterdayLocalDateStr = yesterdayDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+    // Janela móvel: últimas 24h no fuso do usuário
+    const last24hStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const last24hStartMs = last24hStart.getTime();
+    const nowMs = Date.now();
     
-    console.log(`[TIMES] timezone=${userTimezone}, searchWindow=${searchWindowStart.toISOString()}, yesterdayLocal=${yesterdayLocalDateStr}`);
+    console.log(`[TIMES] timezone=${userTimezone}, searchWindow=${searchWindowStart.toISOString()}, last24hStart=${new Date(last24hStartMs).toISOString()}`);
 
     // Helper robusto para extrair timestamp em milissegundos
     const getTimestampMs = (msg: any): number | null => {
@@ -376,18 +377,16 @@ serve(async (req) => {
         // Ordenar por timestamp (ascendente)
         processedMessages.sort((a, b) => (a?.timestampMs || 0) - (b?.timestampMs || 0));
 
-        // Filtrar apenas mensagens de "ontem" no fuso do usuário
-        const yesterdayMessages = processedMessages.filter((msg) => {
+        // Filtrar mensagens das últimas 24h (janela móvel)
+        const windowMessages = processedMessages.filter((msg) => {
           if (!msg) return false;
-          const msgDate = new Date(msg.timestampMs);
-          const msgLocalDateStr = msgDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
-          return msgLocalDateStr === yesterdayLocalDateStr;
+          return (msg.timestampMs as number) >= last24hStartMs && (msg.timestampMs as number) <= nowMs;
         });
 
-        console.log(`[TIMES] ${group.group_name}: filtered to ${yesterdayMessages.length} messages from yesterday (${yesterdayLocalDateStr})`);
+        console.log(`[TIMES] ${group.group_name}: filtered to ${windowMessages.length} messages in the last 24h`);
 
         // Log exemplos de timestamps (até 3)
-        yesterdayMessages.slice(0, 3).forEach((msg, idx) => {
+        windowMessages.slice(0, 3).forEach((msg, idx) => {
           if (!msg) return;
           const formatted = new Date(msg.timestampMs).toLocaleString('pt-BR', {
             day: '2-digit',
@@ -402,7 +401,7 @@ serve(async (req) => {
         });
 
         // Formatar mensagens para o AI
-        const formattedMessages = yesterdayMessages
+        const formattedMessages = windowMessages
           .map((msg) => {
             if (!msg) return null;
             const formattedDate = new Date(msg.timestampMs).toLocaleString('pt-BR', {
