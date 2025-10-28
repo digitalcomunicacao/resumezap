@@ -108,22 +108,108 @@ Deno.serve(async (req) => {
           error: errorText
         });
         
-        // Parse error message to return to frontend
-        let errorMessage = 'Erro ao buscar grupos do WhatsApp';
+        // Try to derive groups from chats as fallback
         try {
-          const errorJson = JSON.parse(errorText);
-          if (errorJson.response?.message) {
-            errorMessage = Array.isArray(errorJson.response.message) 
-              ? errorJson.response.message.join(', ')
-              : errorJson.response.message;
-          } else if (errorJson.error) {
-            errorMessage = errorJson.error;
+          if (!chatsResponse) {
+            chatsResponse = await fetch(
+              `${evolutionApiUrl}/chat/findChats/${connection.instance_name}`,
+              {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': evolutionApiKey,
+                }
+              }
+            );
           }
-        } catch {
-          errorMessage = errorText || errorMessage;
+
+          if (chatsResponse?.ok) {
+            const chatsData = await chatsResponse.json();
+            const chats = Array.isArray(chatsData) ? chatsData : [];
+
+            const activityMapLocal = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
+            const derivedGroups = chats
+              .filter((chat: any) => (chat.id || chat.jid)?.endsWith('@g.us'))
+              .map((chat: any) => {
+                const jid = chat.id || chat.jid;
+                const lastActivity = chat.conversationTimestamp || chat.lastMessage?.timestamp || chat.t || chat.lastMsg?.t || 0;
+                activityMapLocal.set(jid, {
+                  last_activity: lastActivity,
+                  unread_count: chat.unreadCount || chat.unread || 0,
+                  pinned: chat.pinned || false,
+                });
+                return {
+                  id: jid,
+                  subject: chat.name || chat.formattedTitle || chat.subject || chat.pushname || 'Sem nome',
+                  pictureUrl: chat.profilePicUrl || chat.pic || chat.profilePicThumbObj?.eurl || null,
+                  size: chat.size || chat.participantsCount || 0,
+                };
+              });
+
+            for (const group of derivedGroups) {
+              const groupData = {
+                user_id: user.id,
+                whatsapp_connection_id: connection.id,
+                group_id: group.id,
+                group_name: group.subject,
+                group_image: group.pictureUrl,
+                participant_count: group.size || 0,
+              };
+
+              const { data: existingGroup } = await supabaseClient
+                .from('whatsapp_groups')
+                .select('id, is_selected')
+                .eq('user_id', user.id)
+                .eq('group_id', group.id)
+                .maybeSingle();
+
+              if (existingGroup) {
+                await supabaseClient
+                  .from('whatsapp_groups')
+                  .update({
+                    group_name: groupData.group_name,
+                    group_image: groupData.group_image,
+                    participant_count: groupData.participant_count,
+                  })
+                  .eq('id', existingGroup.id);
+              } else {
+                await supabaseClient
+                  .from('whatsapp_groups')
+                  .insert(groupData);
+              }
+            }
+
+            const { data: savedFromChats } = await supabaseClient
+              .from('whatsapp_groups')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('whatsapp_connection_id', connection.id);
+
+            const enriched = (savedFromChats || []).map((g: any) => {
+              const a = activityMapLocal.get(g.group_id);
+              return { ...g, last_activity: a?.last_activity || null, unread_count: a?.unread_count || 0, pinned: a?.pinned || false };
+            });
+
+            enriched.sort((a: any, b: any) => {
+              if (a.is_selected !== b.is_selected) return a.is_selected ? -1 : 1;
+              if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+              if (a.last_activity && b.last_activity) return b.last_activity - a.last_activity;
+              if (a.last_activity && !b.last_activity) return -1;
+              if (!a.last_activity && b.last_activity) return 1;
+              if (a.participant_count !== b.participant_count) return b.participant_count - a.participant_count;
+              return a.group_name.localeCompare(b.group_name, 'pt-BR');
+            });
+
+            return new Response(
+              JSON.stringify({ groups: enriched, message: 'Grupos derivados das conversas (fallback)' }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (fallbackErr) {
+          console.warn('Fallback via chats failed:', fallbackErr);
         }
-        
-        // Fallback to DB cache and return 200 to avoid generic client error
+
+        // Final fallback: DB cache only
         const { data: savedGroups } = await supabaseClient
           .from('whatsapp_groups')
           .select('*')
@@ -135,7 +221,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             groups: savedGroups || [],
-            warning: errorMessage,
+            warning: 'API retornou erro. Exibindo dados em cache.',
             message: 'Grupos carregados do cache (API retornou erro)'
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -167,7 +253,100 @@ Deno.serve(async (req) => {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
         console.error('Evolution API timeout after 25 seconds');
-        // Fallback to DB cache on timeout
+        // Try chats fallback after timeout (new short request)
+        try {
+          const controllerChats = new AbortController();
+          const chatsTimeout = setTimeout(() => controllerChats.abort(), 10000);
+          const chatsResp = await fetch(
+            `${evolutionApiUrl}/chat/findChats/${connection.instance_name}`,
+            {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+              signal: controllerChats.signal,
+            }
+          );
+          clearTimeout(chatsTimeout);
+
+          if (chatsResp.ok) {
+            const chatsData = await chatsResp.json();
+            const chats = Array.isArray(chatsData) ? chatsData : [];
+
+            const activityMapLocal = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
+            const derivedGroups = chats
+              .filter((chat: any) => (chat.id || chat.jid)?.endsWith('@g.us'))
+              .map((chat: any) => {
+                const jid = chat.id || chat.jid;
+                const lastActivity = chat.conversationTimestamp || chat.lastMessage?.timestamp || chat.t || chat.lastMsg?.t || 0;
+                activityMapLocal.set(jid, {
+                  last_activity: lastActivity,
+                  unread_count: chat.unreadCount || chat.unread || 0,
+                  pinned: chat.pinned || false,
+                });
+                return {
+                  id: jid,
+                  subject: chat.name || chat.formattedTitle || chat.subject || chat.pushname || 'Sem nome',
+                  pictureUrl: chat.profilePicUrl || chat.pic || chat.profilePicThumbObj?.eurl || null,
+                  size: chat.size || chat.participantsCount || 0,
+                };
+              });
+
+            for (const group of derivedGroups) {
+              const groupData = {
+                user_id: user.id,
+                whatsapp_connection_id: connection.id,
+                group_id: group.id,
+                group_name: group.subject,
+                group_image: group.pictureUrl,
+                participant_count: group.size || 0,
+              };
+              const { data: existingGroup } = await supabaseClient
+                .from('whatsapp_groups')
+                .select('id, is_selected')
+                .eq('user_id', user.id)
+                .eq('group_id', group.id)
+                .maybeSingle();
+              if (existingGroup) {
+                await supabaseClient.from('whatsapp_groups').update({
+                  group_name: groupData.group_name,
+                  group_image: groupData.group_image,
+                  participant_count: groupData.participant_count,
+                }).eq('id', existingGroup.id);
+              } else {
+                await supabaseClient.from('whatsapp_groups').insert(groupData);
+              }
+            }
+
+            const { data: savedFromChats } = await supabaseClient
+              .from('whatsapp_groups')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('whatsapp_connection_id', connection.id);
+
+            const enriched = (savedFromChats || []).map((g: any) => {
+              const a = activityMapLocal.get(g.group_id);
+              return { ...g, last_activity: a?.last_activity || null, unread_count: a?.unread_count || 0, pinned: a?.pinned || false };
+            });
+
+            enriched.sort((a: any, b: any) => {
+              if (a.is_selected !== b.is_selected) return a.is_selected ? -1 : 1;
+              if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+              if (a.last_activity && b.last_activity) return b.last_activity - a.last_activity;
+              if (a.last_activity && !b.last_activity) return -1;
+              if (!a.last_activity && b.last_activity) return 1;
+              if (a.participant_count !== b.participant_count) return b.participant_count - a.participant_count;
+              return a.group_name.localeCompare(b.group_name, 'pt-BR');
+            });
+
+            return new Response(
+              JSON.stringify({ groups: enriched, message: 'Grupos derivados das conversas (timeout fallback)' }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (chatTimeoutErr) {
+          console.warn('Chats fallback after timeout failed:', chatTimeoutErr);
+        }
+
+        // Final timeout fallback: DB cache
         const { data: savedGroups } = await supabaseClient
           .from('whatsapp_groups')
           .select('*')
@@ -189,8 +368,34 @@ Deno.serve(async (req) => {
       throw error;
     }
 
-    const groupsData = await fetchGroupsResponse.json();
-    console.log('Groups fetched from Evolution API:', groupsData.length || 0, 'groups');
+    let groupsData = await fetchGroupsResponse.json();
+    console.log('Groups fetched from Evolution API:', (Array.isArray(groupsData) ? groupsData.length : 0), 'groups');
+
+    // If empty, try a second attempt with getParticipants=true (some providers require it)
+    if (!Array.isArray(groupsData) || groupsData.length === 0) {
+      try {
+        console.log('Primary groups response empty. Retrying with getParticipants=true ...');
+        const retryResp = await fetch(
+          `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=true`,
+          {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+            signal: controller.signal,
+          }
+        );
+        if (retryResp.ok) {
+          const retryJson = await retryResp.json();
+          if (Array.isArray(retryJson) && retryJson.length > 0) {
+            groupsData = retryJson;
+            console.log('Retry succeeded with', retryJson.length, 'groups');
+          }
+        } else {
+          console.warn('Retry with getParticipants=true returned status', retryResp.status);
+        }
+      } catch (retryErr) {
+        console.warn('Retry with getParticipants=true failed:', retryErr);
+      }
+    }
     
     // Build activity map from chats
     const activityMap = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
