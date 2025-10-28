@@ -75,6 +75,23 @@ Deno.serve(async (req) => {
 
     console.log('Fetching groups from Evolution API for instance:', connection.instance_name);
 
+    // Helper to safely extract arrays from different API response shapes
+    const extractArray = (payload: any): any[] => {
+      if (Array.isArray(payload)) return payload;
+      const candidateKeys = ['data', 'result', 'results', 'response', 'value', 'items', 'groups', 'chats'];
+      for (const key of candidateKeys) {
+        const val = payload?.[key];
+        if (Array.isArray(val)) return val;
+      }
+      // Some providers wrap in { data: { groups: [] } }
+      const nested = payload?.data || payload?.result || payload?.response || {};
+      for (const key of candidateKeys) {
+        const val = nested?.[key];
+        if (Array.isArray(val)) return val;
+      }
+      return [];
+    };
+
     // Fetch groups from Evolution API with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds timeout
@@ -84,10 +101,12 @@ Deno.serve(async (req) => {
     
     try {
       console.log('Starting Evolution API request...');
-      console.log('URL:', `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=false`);
+      // First try WITHOUT query params (most compatible)
+      const groupsUrl = `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`;
+      console.log('URL:', groupsUrl);
       
       fetchGroupsResponse = await fetch(
-        `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=false`,
+        groupsUrl,
         {
           method: 'GET',
           headers: {
@@ -269,7 +288,7 @@ Deno.serve(async (req) => {
 
           if (chatsResp.ok) {
             const chatsData = await chatsResp.json();
-            const chats = Array.isArray(chatsData) ? chatsData : [];
+            const chats = extractArray(chatsData);
 
             const activityMapLocal = new Map<string, { last_activity: number; unread_count: number; pinned: boolean }>();
             const derivedGroups = chats
@@ -368,11 +387,13 @@ Deno.serve(async (req) => {
       throw error;
     }
 
-    let groupsData = await fetchGroupsResponse.json();
-    console.log('Groups fetched from Evolution API:', (Array.isArray(groupsData) ? groupsData.length : 0), 'groups');
+    // Parse groups with robust extractor
+    const groupsJson = await fetchGroupsResponse.json();
+    let groupsDataArr = extractArray(groupsJson);
+    console.log('Groups fetched from Evolution API:', Array.isArray(groupsDataArr) ? groupsDataArr.length : 0, 'groups');
 
     // If empty, try a second attempt with getParticipants=true (some providers require it)
-    if (!Array.isArray(groupsData) || groupsData.length === 0) {
+    if (!Array.isArray(groupsDataArr) || groupsDataArr.length === 0) {
       try {
         console.log('Primary groups response empty. Retrying with getParticipants=true ...');
         const retryResp = await fetch(
@@ -385,9 +406,10 @@ Deno.serve(async (req) => {
         );
         if (retryResp.ok) {
           const retryJson = await retryResp.json();
-          if (Array.isArray(retryJson) && retryJson.length > 0) {
-            groupsData = retryJson;
-            console.log('Retry succeeded with', retryJson.length, 'groups');
+          const retryArr = extractArray(retryJson);
+          if (Array.isArray(retryArr) && retryArr.length > 0) {
+            groupsDataArr = retryArr;
+            console.log('Retry succeeded with', retryArr.length, 'groups');
           }
         } else {
           console.warn('Retry with getParticipants=true returned status', retryResp.status);
@@ -402,8 +424,8 @@ Deno.serve(async (req) => {
     if (chatsResponse?.ok) {
       try {
         const chatsData = await chatsResponse.json();
-        const chats = Array.isArray(chatsData) ? chatsData : [];
-        console.log('Chats fetched:', chats.length);
+        const chats = extractArray(chatsData);
+        console.log('Chats fetched:', Array.isArray(chats) ? chats.length : 0);
         
         for (const chat of chats) {
           const chatId = chat.id || chat.jid;
@@ -430,7 +452,7 @@ Deno.serve(async (req) => {
     }
 
     // Process and save groups
-    const groups = Array.isArray(groupsData) ? groupsData : [];
+    const groups = Array.isArray(groupsDataArr) ? groupsDataArr : []; 
     
     if (groups.length === 0) {
       console.log('Evolution API returned empty groups list');
@@ -464,12 +486,13 @@ Deno.serve(async (req) => {
 
     // Upsert groups to database
     for (const group of groups) {
+      const groupId = group.id || group.jid || group.remoteJid;
       const groupData = {
         user_id: user.id,
         whatsapp_connection_id: connection.id,
-        group_id: group.id,
-        group_name: group.subject || 'Sem nome',
-        group_image: group.pictureUrl || null,
+        group_id: groupId,
+        group_name: group.subject || group.name || 'Sem nome',
+        group_image: group.pictureUrl || group.profilePicUrl || group.picture || null,
         participant_count: group.participants?.length || group.size || group.participantsCount || 0,
       };
 
@@ -478,7 +501,7 @@ Deno.serve(async (req) => {
         .from('whatsapp_groups')
         .select('id, is_selected')
         .eq('user_id', user.id)
-        .eq('group_id', group.id)
+        .eq('group_id', groupId)
         .maybeSingle();
 
       if (existingGroup) {
