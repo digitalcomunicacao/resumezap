@@ -52,14 +52,7 @@ serve(async (req) => {
     }
 
     // 3. Deletar grupos WhatsApp
-    const { error: groupsError } = await supabase
-      .from('whatsapp_groups')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (groupsError) {
-      console.error('Error deleting whatsapp groups:', groupsError);
-    }
+    // Preserving whatsapp_groups (selected groups) on history cleanup
 
     // 4. Deletar analytics de mensagens
     const { error: analyticsError } = await supabase
@@ -72,14 +65,7 @@ serve(async (req) => {
     }
 
     // 5. Deletar preferências de resumo
-    const { error: preferencesError } = await supabase
-      .from('summary_preferences')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (preferencesError) {
-      console.error('Error deleting summary preferences:', preferencesError);
-    }
+    // Preserving summary_preferences on history cleanup
 
     // 6. Deletar logs de resumos manuais
     const { error: logsError } = await supabase
@@ -92,22 +78,12 @@ serve(async (req) => {
     }
 
     // 7. Deletar conexões WhatsApp
-    const { error: connectionError } = await supabase
-      .from('whatsapp_connections')
-      .delete()
-      .eq('user_id', user.id);
-
-    if (connectionError) {
-      console.error('Error deleting whatsapp connections:', connectionError);
-    }
+    // Preserving whatsapp_connections on history cleanup
 
     // 8. Atualizar profile
     await supabase
       .from('profiles')
       .update({
-        whatsapp_connected: false,
-        whatsapp_instance_id: null,
-        selected_groups_count: 0,
         total_summaries_generated: 0,
         updated_at: new Date().toISOString(),
       })
