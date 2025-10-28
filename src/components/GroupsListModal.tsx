@@ -81,6 +81,9 @@ export default function GroupsListModal({
   };
 
   const fetchGroups = async () => {
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30s timeout
+
     setLoading(true);
     setError(null);
 
@@ -107,31 +110,51 @@ export default function GroupsListModal({
         setGroups(sortedGroups);
       }
 
-      // Then fetch fresh groups from WhatsApp in background
+      // Then fetch fresh groups from WhatsApp with timeout
+      toast({
+        title: "Sincronizando grupos",
+        description: "Buscando grupos do WhatsApp...",
+      });
+
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
         throw new Error('Não autenticado');
       }
 
+      const syncStart = Date.now();
       const { data, error } = await supabase.functions.invoke('fetch-groups', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
+        body: {},
+        signal: abortController.signal as any,
       });
 
-      if (error) throw error;
+      clearTimeout(timeoutId);
+
+      if (error) {
+        if (error.message?.includes('aborted')) {
+          throw new Error('Sincronização cancelada por timeout (30s). Tente novamente.');
+        }
+        throw error;
+      }
 
       if (data?.groups) {
+        const syncTime = Date.now() - syncStart;
+        
         // Ordenar grupos: selecionados primeiro
         const sortedGroups = [...data.groups].sort((a, b) => {
           if (a.is_selected === b.is_selected) return 0;
           return a.is_selected ? -1 : 1;
         });
         setGroups(sortedGroups);
+        
+        console.log('Sync performance:', data.performance);
+        
         toast({
-          title: "Grupos sincronizados",
-          description: `${data.groups.length} grupos encontrados`,
+          title: "Grupos sincronizados com sucesso",
+          description: `${data.groups.length} grupos em ${(syncTime / 1000).toFixed(1)}s`,
         });
       }
 
@@ -139,11 +162,12 @@ export default function GroupsListModal({
       console.error('Error fetching groups:', err);
       setError(err.message || 'Erro ao buscar grupos');
       toast({
-        title: "Erro",
+        title: "Erro ao sincronizar grupos",
         description: err.message || "Erro ao buscar grupos do WhatsApp",
         variant: "destructive",
       });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

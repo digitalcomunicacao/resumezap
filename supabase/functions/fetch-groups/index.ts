@@ -100,6 +100,7 @@ Deno.serve(async (req) => {
     }
 
     const groupsData = await fetchGroupsResponse.json();
+    const startTime = Date.now();
     console.log('Groups fetched from Evolution API:', groupsData.length || 0, 'groups');
 
     // Process and save groups
@@ -113,42 +114,51 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Upsert groups to database
-    for (const group of groups) {
-      const groupData = {
-        user_id: user.id,
-        whatsapp_connection_id: connection.id,
-        group_id: group.id,
-        group_name: group.subject || 'Sem nome',
-        group_image: group.pictureUrl || null,
-        participant_count: group.participants?.length || group.size || 0,
-      };
+    // OPTIMIZED: Fetch all existing groups in ONE query instead of N queries
+    const fetchExistingStart = Date.now();
+    const { data: existingGroups } = await supabaseClient
+      .from('whatsapp_groups')
+      .select('group_id, is_selected')
+      .eq('user_id', user.id)
+      .eq('whatsapp_connection_id', connection.id);
+    
+    console.log(`Fetched ${existingGroups?.length || 0} existing groups in ${Date.now() - fetchExistingStart}ms`);
 
-      // Check if group already exists
-      const { data: existingGroup } = await supabaseClient
-        .from('whatsapp_groups')
-        .select('id, is_selected')
-        .eq('user_id', user.id)
-        .eq('group_id', group.id)
-        .maybeSingle();
+    // Create a Map for O(1) lookup of existing groups
+    const existingGroupsMap = new Map(
+      existingGroups?.map(g => [g.group_id, g.is_selected]) || []
+    );
 
-      if (existingGroup) {
-        // Update existing group (keep is_selected value)
-        await supabaseClient
-          .from('whatsapp_groups')
-          .update({
-            group_name: groupData.group_name,
-            group_image: groupData.group_image,
-            participant_count: groupData.participant_count,
-          })
-          .eq('id', existingGroup.id);
-      } else {
-        // Insert new group
-        await supabaseClient
-          .from('whatsapp_groups')
-          .insert(groupData);
-      }
+    // OPTIMIZED: Prepare all groups for batch upsert
+    const groupsToUpsert = groups.map(group => ({
+      user_id: user.id,
+      whatsapp_connection_id: connection.id,
+      group_id: group.id,
+      group_name: group.subject || 'Sem nome',
+      group_image: group.pictureUrl || null,
+      participant_count: group.participants?.length || group.size || 0,
+      // Preserve is_selected if group already exists, otherwise false
+      is_selected: existingGroupsMap.get(group.id) ?? false,
+    }));
+
+    // OPTIMIZED: Upsert all groups in ONE query (instead of N queries)
+    const upsertStart = Date.now();
+    const { error: upsertError } = await supabaseClient
+      .from('whatsapp_groups')
+      .upsert(groupsToUpsert, {
+        onConflict: 'user_id,group_id',
+        ignoreDuplicates: false,
+      });
+
+    if (upsertError) {
+      console.error('Error upserting groups:', upsertError);
+      return new Response(
+        JSON.stringify({ error: 'Erro ao salvar grupos' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    console.log(`Upserted ${groupsToUpsert.length} groups in ${Date.now() - upsertStart}ms`);
 
     // Fetch all groups from database to return
     const { data: savedGroups, error: fetchError } = await supabaseClient
@@ -166,10 +176,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Successfully fetched and saved', savedGroups?.length || 0, 'groups');
+    const totalTime = Date.now() - startTime;
+    console.log(`Successfully synced ${savedGroups?.length || 0} groups in ${totalTime}ms`);
+    console.log(`Performance: ${(totalTime / (savedGroups?.length || 1)).toFixed(2)}ms per group`);
 
     return new Response(
-      JSON.stringify({ groups: savedGroups || [] }),
+      JSON.stringify({ 
+        groups: savedGroups || [],
+        performance: {
+          totalGroups: savedGroups?.length || 0,
+          totalTimeMs: totalTime,
+          avgTimePerGroupMs: totalTime / (savedGroups?.length || 1)
+        }
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
