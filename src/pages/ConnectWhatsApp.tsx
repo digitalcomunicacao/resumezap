@@ -75,13 +75,30 @@ const ConnectWhatsApp = () => {
 
       if (error) throw error;
 
-      if (data.error) {
+      // Handle already connected
+      if (data?.connected) {
+        toast.success("WhatsApp já conectado! Redirecionando...");
+        setTimeout(() => navigate("/dashboard"), 1500);
+        return;
+      }
+
+      // Handle errors
+      if (data?.error) {
         throw new Error(data.error);
       }
 
-      setQrCode(data.qrCode);
-      setInstanceId(data.instanceId);
-      setExpiresAt(new Date(data.expiresAt));
+      // Handle QR code response
+      if (data?.qrCode && data?.instanceId) {
+        const formattedQr = data.qrCode.startsWith('data:image/png;base64,') 
+          ? data.qrCode 
+          : `data:image/png;base64,${data.qrCode}`;
+        
+        setQrCode(formattedQr);
+        setInstanceId(data.instanceId);
+        setExpiresAt(new Date(data.expiresAt));
+      } else {
+        throw new Error(data?.message || "Resposta inesperada do servidor");
+      }
     } catch (err: any) {
       console.error('Error generating QR code:', err);
       setError(err.message || 'Erro ao gerar QR Code');
