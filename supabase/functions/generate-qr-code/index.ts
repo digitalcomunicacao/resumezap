@@ -36,6 +36,15 @@ serve(async (req) => {
 
     console.log('Generating QR code for user:', user.id);
 
+    // TTL cleanup: disconnect stale "connecting" attempts older than 2 minutes
+    const ttlThreshold = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    await supabase
+      .from('whatsapp_connections')
+      .update({ status: 'disconnected' })
+      .eq('user_id', user.id)
+      .eq('status', 'connecting')
+      .lte('qr_code_expires_at', ttlThreshold);
+
     // Check if user already has an active or connecting connection
     const { data: existingConnection } = await supabase
       .from('whatsapp_connections')
@@ -45,11 +54,91 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existingConnection) {
-      console.log('User already has active/connecting connection:', existingConnection.instance_id);
-      return new Response(
-        JSON.stringify({ error: 'Você já tem uma conexão WhatsApp ativa ou em andamento' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log('Existing connection found:', existingConnection.instance_id, existingConnection.status);
+      
+      if (existingConnection.status === 'connected') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            connected: true,
+            reason: 'already_connected',
+            instanceId: existingConnection.instance_id,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // status === 'connecting': try reuse or refresh QR
+      const now = new Date();
+      const expiresAtExisting = existingConnection.qr_code_expires_at ? new Date(existingConnection.qr_code_expires_at) : null;
+
+      if (existingConnection.qr_code && expiresAtExisting && expiresAtExisting > now) {
+        console.log('[REUSED_QR] Returning still-valid QR for existing instance');
+        const formattedQr = existingConnection.qr_code.startsWith('data:')
+          ? existingConnection.qr_code
+          : `data:image/png;base64,${existingConnection.qr_code}`;
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            qrCode: formattedQr,
+            instanceId: existingConnection.instance_id,
+            expiresAt: expiresAtExisting.toISOString(),
+            reason: 'reused_qr',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('[REFRESH_QR] Existing QR expired or missing, requesting new QR for same instance');
+      const refreshResp = await fetch(`${evolutionApiUrl}/instance/connect/${existingConnection.instance_id}`, {
+        method: 'GET',
+        headers: { 'apikey': evolutionApiKey },
+      });
+
+      if (refreshResp.ok) {
+        const refreshData = await refreshResp.json();
+        const refreshedRaw = refreshData.base64 || refreshData.code || refreshData.qrcode?.base64;
+        if (!refreshedRaw) {
+          console.error('No QR in refresh response:', refreshData);
+        } else {
+          const refreshedQr = typeof refreshedRaw === 'string' && refreshedRaw.startsWith('data:')
+            ? refreshedRaw
+            : `data:image/png;base64,${refreshedRaw}`;
+          const refreshedExpiresAt = new Date(Date.now() + 60000).toISOString();
+
+          const { error: updateErr } = await supabase
+            .from('whatsapp_connections')
+            .update({ qr_code: refreshedQr, qr_code_expires_at: refreshedExpiresAt })
+            .eq('id', existingConnection.id);
+
+          if (updateErr) {
+            console.error('Error updating refreshed QR in DB:', updateErr);
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              qrCode: refreshedQr,
+              instanceId: existingConnection.instance_id,
+              expiresAt: refreshedExpiresAt,
+              reason: 'refreshed_qr',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else if (refreshResp.status === 404) {
+        console.warn('[REFRESH_QR] Instance not found on provider (404). Will disconnect record and create new one.');
+      } else {
+        const errText = await refreshResp.text();
+        console.error('[REFRESH_QR] Provider error:', refreshResp.status, errText);
+      }
+
+      // If we reach here, mark old record as disconnected and continue to create a new instance
+      await supabase
+        .from('whatsapp_connections')
+        .update({ status: 'disconnected' })
+        .eq('id', existingConnection.id);
     }
 
     // Mark any previous connections as disconnected before creating new one
@@ -144,15 +233,19 @@ serve(async (req) => {
     const connectData = await connectResponse.json();
     console.log('QR code generated');
 
-    const qrCode = connectData.base64 || connectData.code || connectData.qrcode?.base64;
+    const qrRaw = connectData.base64 || connectData.code || connectData.qrcode?.base64;
 
-    if (!qrCode) {
+    if (!qrRaw) {
       console.error('No QR code in response:', connectData);
       return new Response(
         JSON.stringify({ error: 'QR Code não encontrado na resposta' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const qrCode = typeof qrRaw === 'string' && qrRaw.startsWith('data:')
+      ? qrRaw
+      : `data:image/png;base64,${qrRaw}`;
 
     // Save connection to database
     const expiresAt = new Date(Date.now() + 60000); // 60 seconds from now
