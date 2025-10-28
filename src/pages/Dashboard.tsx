@@ -318,10 +318,10 @@ const Dashboard = () => {
             <Card className="shadow-soft border-primary/20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {subscriptionPlan && subscriptionPlan !== 'free' ? (
+                  {subscriptionPlan !== 'free' ? (
                     <>
                       <Crown className="w-5 h-5 text-primary" />
-                      Plano {STRIPE_PLANS[subscriptionPlan]?.name || 'Premium'}
+                      Plano {STRIPE_PLANS[subscriptionPlan].name}
                     </>
                   ) : (
                     <>
@@ -331,7 +331,7 @@ const Dashboard = () => {
                   )}
                 </CardTitle>
                 <CardDescription>
-                  {subscriptionPlan && subscriptionPlan !== 'free' ? (
+                  {subscriptionPlan !== 'free' ? (
                     <>
                       {groupsLimit} grupos • 
                       {subscriptionEnd && ` Renova em ${format(new Date(subscriptionEnd), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`}

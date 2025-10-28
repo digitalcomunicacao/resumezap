@@ -91,17 +91,83 @@ serve(async (req) => {
     // Get user's summary preferences
     const { data: preferences } = await supabase
       .from('summary_preferences')
-      .select('*')
+      .select('*, timezone')
       .eq('user_id', userId)
       .maybeSingle();
 
+    const userTimezone = preferences?.timezone || 'America/Sao_Paulo';
+
     const summariesGenerated = [];
     const groupDetails = [];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
-    const timestampFromSeconds = Math.floor(yesterday.getTime() / 1000);
-    const timestampFromMs = yesterday.getTime();
+    
+    // Ajustar janela de busca para 48h atrás para cobrir variações de fuso
+    const searchWindowStart = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const timestampFromSeconds = Math.floor(searchWindowStart.getTime() / 1000);
+    const timestampFromMs = searchWindowStart.getTime();
+    
+    // Calcular "ontem" no fuso do usuário
+    const yesterdayDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const yesterdayLocalDateStr = yesterdayDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+    
+    console.log(`[TIMES] timezone=${userTimezone}, searchWindow=${searchWindowStart.toISOString()}, yesterdayLocal=${yesterdayLocalDateStr}`);
+
+    // Helper robusto para extrair timestamp em milissegundos
+    const getTimestampMs = (msg: any): number | null => {
+      const parseVal = (val: any): number | null => {
+        if (val == null) return null;
+        
+        if (typeof val === 'number') {
+          // 10 dígitos = seconds
+          if (val < 1e11) return val * 1000;
+          // 13 dígitos = ms
+          if (val < 1e14) return val;
+          // 16 dígitos = microseconds
+          if (val < 1e17) return Math.floor(val / 1e3);
+          // 19+ dígitos = nanoseconds
+          return Math.floor(val / 1e6);
+        }
+        
+        if (typeof val === 'string') {
+          // Remover não-dígitos e tentar normalizar
+          const digits = val.replace(/\D/g, '');
+          if (digits.length >= 10) {
+            const n = Number(digits);
+            if (digits.length === 10) return n * 1000;
+            if (digits.length === 13) return n;
+            if (digits.length === 16) return Math.floor(n / 1e3);
+            if (digits.length >= 19) return Math.floor(n / 1e6);
+          }
+          
+          // Tentar parse ISO
+          const iso = Date.parse(val);
+          if (!Number.isNaN(iso)) return iso;
+          
+          // Último recurso: converter string para número
+          const n = Number(val);
+          if (!Number.isNaN(n)) return parseVal(n);
+        }
+        
+        return null;
+      };
+
+      // Tentar extrair timestamp de múltiplas fontes possíveis
+      const candidates = [
+        msg?.messageTimestampMs,
+        msg?.messageTimestamp,
+        msg?.timestamp,
+        msg?.message?.messageTimestamp,
+        msg?.message?.extendedTextMessage?.contextInfo?.messageTimestamp,
+        msg?.message?.contextInfo?.messageTimestamp,
+        msg?.key?.messageTimestamp,
+      ];
+      
+      for (const c of candidates) {
+        const ms = parseVal(c);
+        if (ms) return ms;
+      }
+      
+      return null;
+    };
 
     // Helper function to extract messages from various API response formats
     const extractMessages = (data: any): any[] => {
@@ -148,6 +214,70 @@ serve(async (req) => {
       }
       
       return null;
+    };
+
+    // Light phone formatter to produce readable identifiers from JIDs/phone numbers
+    function formatPhoneNumber(digits: string): string {
+      const only = (digits || '').replace(/\D/g, '');
+      if (only.length >= 12) {
+        const cc = only.slice(0, 2);
+        const area = only.slice(2, 4);
+        const rest = only.slice(4);
+        if (rest.length >= 9) {
+          return `+${cc} (${area}) ${rest.slice(0,5)}-${rest.slice(5,9)}`;
+        }
+        return `+${cc} (${area}) ${rest}`;
+      }
+      if (only.length >= 10) {
+        const area = only.slice(0, 2);
+        const rest = only.slice(2);
+        if (rest.length >= 9) {
+          return `(${area}) ${rest.slice(0,5)}-${rest.slice(5,9)}`;
+        }
+        return `(${area}) ${rest}`;
+      }
+      if (only.length >= 4) return `***${only.slice(-4)}`;
+      return 'Desconhecido';
+    }
+
+    // Helper to extract the best-possible sender name
+    const extractSenderName = (msg: any, youLabel: string = 'Você'): string => {
+      try {
+        // If the message is sent by the authenticated user
+        if (msg?.key?.fromMe) return youLabel;
+
+        const candidates: any[] = [
+          msg?.pushName,
+          msg?.sender?.name,
+          msg?.senderName,
+          msg?.notifyName,
+          msg?.message?.extendedTextMessage?.contextInfo?.participant,
+          msg?.key?.participant,
+          msg?.participant,
+          msg?.author,
+          msg?.participant?.id,
+        ].filter(Boolean);
+
+        let name = candidates[0];
+        if (typeof name === 'string') {
+          // If it's a JID, prettify it
+          if (name.includes('@')) {
+            const digits = name.split('@')[0];
+            if (digits) name = formatPhoneNumber(digits);
+          }
+          return name;
+        }
+
+        const jid: string | undefined = msg?.key?.participant || msg?.participant || msg?.key?.remoteJid;
+        if (jid && typeof jid === 'string') {
+          const digits = jid.split('@')[0];
+          if (digits) return formatPhoneNumber(digits);
+        }
+
+        return 'Anônimo';
+      } catch {
+        return 'Anônimo';
+      }
     };
 
     for (const group of groups) {
@@ -223,13 +353,68 @@ serve(async (req) => {
 
         console.log(`Processing ${messages.length} messages (via ${fetchMethod}) for ${group.group_name}`);
 
-        // Format messages for AI - extract text from various message types
-        const formattedMessages = messages
+        // Processar mensagens: extrair timestamp, ordenar e filtrar por "ontem"
+        const processedMessages = messages
           .map((msg: any) => {
             const text = extractTextContent(msg);
             if (!text) return null;
-            const sender = msg.pushName || 'Anônimo';
-            return `${sender}: ${text}`;
+            
+            const timestampMs = getTimestampMs(msg);
+            if (!timestampMs) {
+              console.log(`[TIMES] Skipping message with invalid timestamp in ${group.group_name}`);
+              return null;
+            }
+            
+            const sender = extractSenderName(msg);
+            return { text, sender, timestampMs };
+          })
+          .filter(Boolean);
+
+        const fetchedCount = processedMessages.length;
+        console.log(`[TIMES] ${group.group_name}: fetched ${messages.length}, valid timestamps ${fetchedCount}`);
+
+        // Ordenar por timestamp (ascendente)
+        processedMessages.sort((a, b) => (a?.timestampMs || 0) - (b?.timestampMs || 0));
+
+        // Filtrar apenas mensagens de "ontem" no fuso do usuário
+        const yesterdayMessages = processedMessages.filter((msg) => {
+          if (!msg) return false;
+          const msgDate = new Date(msg.timestampMs);
+          const msgLocalDateStr = msgDate.toLocaleDateString('en-CA', { timeZone: userTimezone });
+          return msgLocalDateStr === yesterdayLocalDateStr;
+        });
+
+        console.log(`[TIMES] ${group.group_name}: filtered to ${yesterdayMessages.length} messages from yesterday (${yesterdayLocalDateStr})`);
+
+        // Log exemplos de timestamps (até 3)
+        yesterdayMessages.slice(0, 3).forEach((msg, idx) => {
+          if (!msg) return;
+          const formatted = new Date(msg.timestampMs).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+            timeZone: userTimezone
+          });
+          console.log(`[TIMES] Example ${idx + 1}: ${msg.timestampMs} -> ${formatted}`);
+        });
+
+        // Formatar mensagens para o AI
+        const formattedMessages = yesterdayMessages
+          .map((msg) => {
+            if (!msg) return null;
+            const formattedDate = new Date(msg.timestampMs).toLocaleString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hourCycle: 'h23',
+              timeZone: userTimezone
+            });
+            return `[${formattedDate}] ${msg.sender}: ${msg.text}`;
           })
           .filter(Boolean)
           .join('\n');
@@ -250,47 +435,90 @@ serve(async (req) => {
         console.log(`Found ${textMessageCount} text messages from ${messages.length} total messages`);
 
         // Determine AI model based on plan
-        const aiModel = (userPlan === 'pro' || userPlan === 'premium') 
+        const aiModel = (userPlan === 'enterprise' || userPlan === 'pro' || userPlan === 'premium') 
           ? 'google/gemini-2.5-pro' 
           : 'google/gemini-2.5-flash';
 
         // Build system prompt based on preferences
-        let systemPrompt = 'Você é um assistente especializado em criar resumos de conversas do WhatsApp.';
+        let systemPrompt = '';
+        let userPrompt = '';
         
         const tone = preferences?.tone || 'professional';
         const size = preferences?.size || 'medium';
         const thematicFocus = preferences?.thematic_focus;
         const includeSentiment = preferences?.include_sentiment_analysis || false;
 
-        // Tone customization
-        const toneInstructions = {
-          professional: 'Mantenha um tom profissional e objetivo.',
-          casual: 'Use um tom casual e descontraído.',
-          formal: 'Mantenha um tom formal e elegante.',
-          friendly: 'Use um tom amigável e acolhedor.',
-        };
-        systemPrompt += ` ${toneInstructions[tone as keyof typeof toneInstructions] || toneInstructions.professional}`;
+        // Sistema prompt específico para Enterprise
+        if (userPlan === 'enterprise') {
+          systemPrompt = `Você é um assistente especializado em análise detalhada de conversas do WhatsApp para empresas.
+  
+INSTRUÇÕES ESPECÍFICAS ENTERPRISE:
+- Identifique TODOS os participantes que falaram
+- Mantenha referências temporais precisas (use os timestamps fornecidos)
+- Destaque mensagens-chave com data/hora
+- Identifique padrões de horário (ex: "Discussão principal às 14h30")
+- Liste decisões tomadas com timestamps
+- Identifique perguntas não respondidas
+- Analise a sequência temporal das conversas
+- Inclua estatísticas de participação por usuário
 
-        // Size customization
-        const sizeInstructions = {
-          short: 'Crie um resumo bem curto, com no máximo 3 pontos principais.',
-          medium: 'Crie um resumo médio, com 4-6 pontos principais.',
-          long: 'Crie um resumo detalhado, com 7-10 pontos principais.',
-          detailed: 'Crie um resumo muito detalhado, cobrindo todos os aspectos importantes.',
-        };
-        systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
+FORMATO DO RESUMO:
+📊 Estatísticas:
+- Total de mensagens
+- Participantes ativos
+- Horário de pico
 
-        // Thematic focus
-        if (thematicFocus) {
-          systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
+⏱️ Cronologia Principal:
+- [HH:MM] Ponto importante 1
+- [HH:MM] Ponto importante 2
+
+👥 Participação:
+- Usuário X: principais contribuições
+- Usuário Y: principais contribuições
+
+💬 Tópicos Discutidos:
+- Tópico 1 (com timestamps relevantes)
+- Tópico 2 (com timestamps relevantes)
+
+⚠️ Pendências:
+- Itens que requerem atenção`;
+
+          userPrompt = `Analise a conversa abaixo do grupo "${group.group_name}" e forneça um resumo estruturado seguindo o formato especificado:\n\n${formattedMessages}`;
+        } else {
+          // Manter lógica atual para outros planos
+          systemPrompt = 'Você é um assistente especializado em criar resumos de conversas do WhatsApp.';
+          
+          // Tone customization
+          const toneInstructions = {
+            professional: 'Mantenha um tom profissional e objetivo.',
+            casual: 'Use um tom casual e descontraído.',
+            formal: 'Mantenha um tom formal e elegante.',
+            friendly: 'Use um tom amigável e acolhedor.',
+          };
+          systemPrompt += ` ${toneInstructions[tone as keyof typeof toneInstructions] || toneInstructions.professional}`;
+
+          // Size customization
+          const sizeInstructions = {
+            short: 'Crie um resumo bem curto, com no máximo 3 pontos principais.',
+            medium: 'Crie um resumo médio, com 4-6 pontos principais.',
+            long: 'Crie um resumo detalhado, com 7-10 pontos principais.',
+            detailed: 'Crie um resumo muito detalhado, cobrindo todos os aspectos importantes.',
+          };
+          systemPrompt += ` ${sizeInstructions[size as keyof typeof sizeInstructions] || sizeInstructions.medium}`;
+
+          // Thematic focus
+          if (thematicFocus) {
+            systemPrompt += ` Foque principalmente em tópicos relacionados a: ${thematicFocus}.`;
+          }
+
+          // Sentiment analysis
+          if (includeSentiment) {
+            systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
+          }
+
+          systemPrompt += ' Organize em bullet points em português brasileiro.';
+          userPrompt = `Resuma as mensagens abaixo do grupo "${group.group_name}":\n\n${formattedMessages}`;
         }
-
-        // Sentiment analysis
-        if (includeSentiment) {
-          systemPrompt += ' Inclua uma breve análise do sentimento geral da conversa (positivo, neutro ou negativo).';
-        }
-
-        systemPrompt += ' Organize em bullet points em português brasileiro.';
 
         // Generate summary using Lovable AI
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -308,7 +536,7 @@ serve(async (req) => {
               },
               {
                 role: 'user',
-                content: `Resuma as mensagens abaixo do grupo "${group.group_name}":\n\n${formattedMessages}`
+                content: userPrompt
               }
             ],
           }),

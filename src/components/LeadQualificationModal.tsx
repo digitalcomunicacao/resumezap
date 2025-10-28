@@ -13,8 +13,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const qualificationSchema = z.object({
-  whatsapp: z.string().min(10, "WhatsApp é obrigatório").max(20, "WhatsApp inválido"),
-  city: z.string().min(2, "Cidade é obrigatória"),
+  whatsapp: z.string()
+    .min(10, "WhatsApp é obrigatório")
+    .regex(/^\(\d{2}\)\s\d{4,5}-\d{4}$/, "Formato inválido. Use: (XX) XXXXX-XXXX")
+    .transform((val) => {
+      // Converter para formato internacional +55XXXXXXXXXXX
+      const cleaned = val.replace(/\D/g, "");
+      return `+55${cleaned}`;
+    }),
+  city: z.string().min(2, "Cidade é obrigatória").max(100, "Cidade muito longa"),
   profession: z.enum(["empresario", "diretor_gestor", "marketing_operacoes", "outros"]),
   company_revenue: z.string().optional(),
   company_employees: z.string().optional(),

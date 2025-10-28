@@ -41,6 +41,30 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_whitelist: {
+        Row: {
+          added_at: string | null
+          added_by: string | null
+          email: string
+          id: string
+          notes: string | null
+        }
+        Insert: {
+          added_at?: string | null
+          added_by?: string | null
+          email: string
+          id?: string
+          notes?: string | null
+        }
+        Update: {
+          added_at?: string | null
+          added_by?: string | null
+          email?: string
+          id?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
       analytics_events: {
         Row: {
           created_at: string | null
@@ -188,6 +212,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          connection_mode: string
           created_at: string | null
           email: string | null
           full_name: string | null
@@ -212,6 +237,7 @@ export type Database = {
           whatsapp_instance_id: string | null
         }
         Insert: {
+          connection_mode?: string
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -236,6 +262,7 @@ export type Database = {
           whatsapp_instance_id?: string | null
         }
         Update: {
+          connection_mode?: string
           created_at?: string | null
           email?: string | null
           full_name?: string | null
@@ -291,6 +318,36 @@ export type Database = {
           status?: string
           summaries_generated?: number | null
           users_processed?: number | null
+        }
+        Relationships: []
+      }
+      security_audit_logs: {
+        Row: {
+          created_at: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          ip_address: unknown
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          ip_address?: unknown
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          ip_address?: unknown
+          user_agent?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -381,10 +438,12 @@ export type Database = {
         Row: {
           created_at: string | null
           enable_smart_alerts: boolean | null
+          enterprise_detail_level: string | null
           id: string
           include_sentiment_analysis: boolean | null
           size: string | null
           thematic_focus: string | null
+          timezone: string | null
           tone: string | null
           updated_at: string | null
           user_id: string
@@ -392,10 +451,12 @@ export type Database = {
         Insert: {
           created_at?: string | null
           enable_smart_alerts?: boolean | null
+          enterprise_detail_level?: string | null
           id?: string
           include_sentiment_analysis?: boolean | null
           size?: string | null
           thematic_focus?: string | null
+          timezone?: string | null
           tone?: string | null
           updated_at?: string | null
           user_id: string
@@ -403,10 +464,12 @@ export type Database = {
         Update: {
           created_at?: string | null
           enable_smart_alerts?: boolean | null
+          enterprise_detail_level?: string | null
           id?: string
           include_sentiment_analysis?: boolean | null
           size?: string | null
           thematic_focus?: string | null
+          timezone?: string | null
           tone?: string | null
           updated_at?: string | null
           user_id?: string
@@ -445,10 +508,12 @@ export type Database = {
       whatsapp_connections: {
         Row: {
           connected_at: string | null
+          connection_type: string
           created_at: string | null
           id: string
           instance_id: string
           instance_name: string
+          last_connected_at: string | null
           phone_number: string | null
           qr_code: string | null
           qr_code_expires_at: string | null
@@ -458,10 +523,12 @@ export type Database = {
         }
         Insert: {
           connected_at?: string | null
+          connection_type?: string
           created_at?: string | null
           id?: string
           instance_id: string
           instance_name: string
+          last_connected_at?: string | null
           phone_number?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null
@@ -471,10 +538,12 @@ export type Database = {
         }
         Update: {
           connected_at?: string | null
+          connection_type?: string
           created_at?: string | null
           id?: string
           instance_id?: string
           instance_name?: string
+          last_connected_at?: string | null
           phone_number?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null

@@ -133,8 +133,11 @@ export const WhatsAppConnectionModal = ({
           <DialogTitle className="text-2xl font-bold text-center">
             Conectar WhatsApp
           </DialogTitle>
-          <DialogDescription className="text-center">
-            Escaneie o QR Code com seu WhatsApp
+          <DialogDescription className="text-center space-y-2">
+            <p>Escaneie o QR Code com seu WhatsApp</p>
+            <p className="text-xs text-muted-foreground bg-primary/5 p-2 rounded-md">
+              💡 <strong>Suas notificações continuam funcionando!</strong> Conectamos apenas na hora de gerar o resumo para preservar suas notificações normais.
+            </p>
           </DialogDescription>
         </DialogHeader>
 

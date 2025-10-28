@@ -17,6 +17,7 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
   const [summaryLength, setSummaryLength] = useState("medio");
   const [preferredTime, setPreferredTime] = useState("09:00:00");
   const [sendToGroup, setSendToGroup] = useState(true);
+  const [connectionMode, setConnectionMode] = useState("temporary");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -24,7 +25,7 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
     const fetchPreferences = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('summary_tone, summary_length, preferred_summary_time, send_summary_to_group')
+        .select('summary_tone, summary_length, preferred_summary_time, send_summary_to_group, connection_mode')
         .eq('id', userId)
         .single();
 
@@ -36,6 +37,7 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
         setSummaryLength(data.summary_length || 'medio');
         setPreferredTime(data.preferred_summary_time || '09:00:00');
         setSendToGroup(data.send_summary_to_group ?? true);
+        setConnectionMode(data.connection_mode || 'temporary');
       }
       setLoading(false);
     };
@@ -52,6 +54,7 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
         summary_length: summaryLength,
         preferred_summary_time: preferredTime,
         send_summary_to_group: sendToGroup,
+        connection_mode: connectionMode,
       })
       .eq('id', userId);
 
@@ -143,21 +146,62 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
           </p>
         </div>
 
-        <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
-          <div className="flex-1 space-y-1">
+        <div className="space-y-2">
+          <Label>Modo de Conexão WhatsApp</Label>
+          <Select value={connectionMode} onValueChange={setConnectionMode}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="temporary">
+                <div className="space-y-0.5">
+                  <div className="font-medium">🔔 Temporária (Recomendado)</div>
+                  <div className="text-xs text-muted-foreground">Conecta apenas na hora do resumo</div>
+                </div>
+              </SelectItem>
+              <SelectItem value="persistent">
+                <div className="space-y-0.5">
+                  <div className="font-medium">🔗 Sempre Conectada</div>
+                  <div className="text-xs text-muted-foreground">Mantém conexão ativa</div>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground bg-primary/5 p-2 rounded-md">
+            {connectionMode === 'temporary' 
+              ? '✅ Suas notificações do WhatsApp funcionam normalmente. Conectamos apenas no horário do resumo.'
+              : '⚠️ Neste modo você pode receber menos notificações no celular, similar ao WhatsApp Web.'
+            }
+          </p>
+        </div>
+
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
             <Label htmlFor="send-to-group" className="flex items-center gap-2">
               <Send className="w-4 h-4" />
-              Enviar no Grupo
+              Enviar Resumo no Grupo
             </Label>
-            <p className="text-sm text-muted-foreground">
-              Receber o resumo diretamente no grupo do WhatsApp
+            <Switch
+              id="send-to-group"
+              checked={sendToGroup}
+              onCheckedChange={setSendToGroup}
+            />
+          </div>
+          
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>
+              {sendToGroup 
+                ? "✅ O resumo será postado automaticamente no grupo do WhatsApp no horário configurado."
+                : "📊 O resumo ficará disponível apenas no seu Dashboard (privado)."
+              }
+            </p>
+            <p className="text-xs bg-primary/5 p-2 rounded">
+              💡 <strong>Como funciona:</strong> {sendToGroup 
+                ? "Todos os membros do grupo verão o resumo. Ideal para grupos de trabalho ou comunidades."
+                : "Apenas você verá o resumo aqui no Dashboard. Ideal para grupos pessoais ou sigilosos."
+              }
             </p>
           </div>
-          <Switch
-            id="send-to-group"
-            checked={sendToGroup}
-            onCheckedChange={setSendToGroup}
-          />
         </div>
 
         <Button onClick={handleSave} disabled={saving} className="w-full">

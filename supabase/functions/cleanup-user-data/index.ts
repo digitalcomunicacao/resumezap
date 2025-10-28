@@ -14,8 +14,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL')!;
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!;
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -31,43 +29,7 @@ serve(async (req) => {
       );
     }
 
-    const { instanceId } = await req.json();
-
-    if (!instanceId) {
-      return new Response(
-        JSON.stringify({ error: 'Instance ID é obrigatório' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('Disconnecting instance:', instanceId);
-
-    // Logout instance in Evolution API
-    const logoutResponse = await fetch(`${evolutionApiUrl}/instance/logout/${instanceId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': evolutionApiKey,
-      },
-    });
-
-    if (!logoutResponse.ok) {
-      console.error('Evolution API logout error:', await logoutResponse.text());
-    }
-
-    // Delete instance in Evolution API
-    const deleteResponse = await fetch(`${evolutionApiUrl}/instance/delete/${instanceId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': evolutionApiKey,
-      },
-    });
-
-    if (!deleteResponse.ok) {
-      console.error('Evolution API delete error:', await deleteResponse.text());
-    }
-
-    // Deletar histórico do usuário antes de desconectar
-    console.log('Deleting user history for user:', user.id);
+    console.log('Cleaning up data for user:', user.id);
 
     // 1. Deletar deliveries de resumos
     const { error: deliveriesError } = await supabase
@@ -129,15 +91,14 @@ serve(async (req) => {
       console.error('Error deleting manual summary logs:', logsError);
     }
 
-    // 7. Deletar conexão WhatsApp
+    // 7. Deletar conexões WhatsApp
     const { error: connectionError } = await supabase
       .from('whatsapp_connections')
       .delete()
-      .eq('instance_id', instanceId)
       .eq('user_id', user.id);
 
     if (connectionError) {
-      console.error('Error deleting whatsapp connection:', connectionError);
+      console.error('Error deleting whatsapp connections:', connectionError);
     }
 
     // 8. Atualizar profile
@@ -152,15 +113,18 @@ serve(async (req) => {
       })
       .eq('id', user.id);
 
-    console.log('WhatsApp disconnected and user history cleaned successfully');
+    console.log('User data cleaned successfully');
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ 
+        success: true,
+        message: 'Histórico limpo com sucesso' 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in disconnect-whatsapp:', error);
+    console.error('Error in cleanup-user-data:', error);
     const errorMessage = error instanceof Error ? error.message : 'Erro interno do servidor';
     return new Response(
       JSON.stringify({ error: errorMessage }),
