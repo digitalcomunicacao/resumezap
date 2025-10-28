@@ -129,19 +129,32 @@ export default function GroupsListModal({
           return a.is_selected ? -1 : 1;
         });
         setGroups(sortedGroups);
+        
+        // Show if loaded from cache
+        const isCache = data.message?.includes('cache');
         toast({
-          title: "Grupos sincronizados",
-          description: `${data.groups.length} grupos encontrados`,
+          title: isCache ? "Grupos do cache" : "Grupos sincronizados",
+          description: `${data.groups.length} grupos ${isCache ? 'carregados' : 'encontrados'}`,
+          duration: isCache ? 3000 : 2000,
         });
       }
 
     } catch (err: any) {
       console.error('Error fetching groups:', err);
-      setError(err.message || 'Erro ao buscar grupos');
+      
+      let errorMessage = err.message || "Erro ao buscar grupos do WhatsApp";
+      
+      // Better error message for timeout
+      if (err.message?.includes('Timeout') || err.message?.includes('timeout')) {
+        errorMessage = "A busca está demorando muito. Isso pode acontecer se você tem muitos grupos. Tente novamente em alguns minutos.";
+      }
+      
+      setError(errorMessage);
       toast({
-        title: "Erro",
-        description: err.message || "Erro ao buscar grupos do WhatsApp",
+        title: "Erro ao sincronizar",
+        description: errorMessage,
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setLoading(false);

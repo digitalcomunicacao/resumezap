@@ -75,17 +75,44 @@ Deno.serve(async (req) => {
 
     console.log('Fetching groups from Evolution API for instance:', connection.instance_name);
 
-    // Fetch groups from Evolution API
-    const fetchGroupsResponse = await fetch(
-      `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}?getParticipants=true`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': evolutionApiKey,
-        },
+    // Fetch groups from Evolution API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
+    let fetchGroupsResponse;
+    try {
+      console.log('Starting Evolution API request...');
+      console.log('URL:', `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`);
+      
+      fetchGroupsResponse = await fetch(
+        `${evolutionApiUrl}/group/fetchAllGroups/${connection.instance_name}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': evolutionApiKey,
+          },
+          signal: controller.signal,
+        }
+      );
+      
+      clearTimeout(timeoutId);
+      console.log('Evolution API response status:', fetchGroupsResponse.status);
+      console.log('Evolution API response ok:', fetchGroupsResponse.ok);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error('Evolution API timeout after 15 seconds');
+        return new Response(
+          JSON.stringify({ 
+            error: 'Timeout ao buscar grupos. A API está demorando muito para responder. Tente novamente em alguns minutos.' 
+          }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    );
+      console.error('Evolution API fetch error:', error);
+      throw error;
+    }
 
     if (!fetchGroupsResponse.ok) {
       const errorText = await fetchGroupsResponse.text();
@@ -106,7 +133,27 @@ Deno.serve(async (req) => {
     const groups = Array.isArray(groupsData) ? groupsData : [];
     
     if (groups.length === 0) {
-      console.log('No groups found');
+      console.log('Evolution API returned empty groups list');
+      
+      // Check for saved groups in database
+      const { data: savedGroups } = await supabaseClient
+        .from('whatsapp_groups')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('group_name');
+        
+      if (savedGroups && savedGroups.length > 0) {
+        console.log('Returning', savedGroups.length, 'saved groups from database cache');
+        return new Response(
+          JSON.stringify({ 
+            groups: savedGroups,
+            message: 'Grupos carregados do cache (Evolution API não retornou grupos novos)'
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log('No groups found in Evolution API or database');
       return new Response(
         JSON.stringify({ groups: [], message: 'Nenhum grupo encontrado' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -121,7 +168,7 @@ Deno.serve(async (req) => {
         group_id: group.id,
         group_name: group.subject || 'Sem nome',
         group_image: group.pictureUrl || null,
-        participant_count: group.participants?.length || group.size || 0,
+        participant_count: group.participants?.length || group.size || group.participantsCount || 0,
       };
 
       // Check if group already exists
