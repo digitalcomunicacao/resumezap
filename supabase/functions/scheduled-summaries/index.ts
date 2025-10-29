@@ -154,20 +154,38 @@ serve(async (req) => {
   }
 
   let executionId: string | null = null;
+  let supabase: any = null;
 
   try {
-    logStep("Cron job started");
+    logStep("=== CRON JOB STARTED ===");
 
+    // Validar variáveis de ambiente com logs detalhados
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
     const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
 
+    logStep("Environment variables check", {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceKey,
+      hasEvolutionUrl: !!evolutionApiUrl,
+      hasEvolutionKey: !!evolutionApiKey,
+      supabaseUrlPrefix: supabaseUrl?.substring(0, 20),
+      evolutionUrlPrefix: evolutionApiUrl?.substring(0, 20)
+    });
+
     if (!supabaseUrl || !supabaseServiceKey || !evolutionApiUrl || !evolutionApiKey) {
-      throw new Error('Missing environment variables');
+      const missing = [];
+      if (!supabaseUrl) missing.push('SUPABASE_URL');
+      if (!supabaseServiceKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      if (!evolutionApiUrl) missing.push('EVOLUTION_API_URL');
+      if (!evolutionApiKey) missing.push('EVOLUTION_API_KEY');
+      throw new Error(`Missing environment variables: ${missing.join(', ')}`);
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    logStep("Creating Supabase client");
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
+    logStep("Supabase client created successfully");
 
     // Obter hora atual em Brasília (GMT-3)
     const now = new Date();
@@ -236,7 +254,7 @@ serve(async (req) => {
     }
 
     // Buscar conexões WhatsApp para esses usuários
-    const userIds = profilesData.map(p => p.id);
+    const userIds = profilesData.map((p: any) => p.id);
     const { data: connections } = await supabase
       .from('whatsapp_connections')
       .select('user_id, id, instance_name, status, connection_type')
@@ -246,16 +264,16 @@ serve(async (req) => {
 
     // Combinar profiles com suas conexões
     const profilesWithConnections = profilesData
-      .map(profile => ({
+      .map((profile: any) => ({
         ...profile,
-        whatsapp_connection: connections?.find(c => c.user_id === profile.id)
+        whatsapp_connection: connections?.find((c: any) => c.user_id === profile.id)
       }))
-      .filter(p => p.whatsapp_connection); // Apenas usuários com conexão
+      .filter((p: any) => p.whatsapp_connection); // Apenas usuários com conexão
 
     logStep("Profiles with connections", { count: profilesWithConnections.length });
 
     // Filtrar usuários cujo horário preferido é a hora atual (Brasília)
-    const usersToProcess = profilesWithConnections.filter(p => {
+    const usersToProcess = profilesWithConnections.filter((p: any) => {
       const [hour] = p.preferred_summary_time.split(':');
       return parseInt(hour) === brasiliaHour;
     });
@@ -501,7 +519,7 @@ serve(async (req) => {
     logStep("Starting parallel processing", { userCount: usersToProcess.length });
     
     const results = await Promise.allSettled(
-      usersToProcess.map(profile => processUser(profile))
+      usersToProcess.map((profile: any) => processUser(profile))
     );
 
     // Contar sucessos e erros
@@ -575,32 +593,70 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    logStep("Fatal error", { error: error instanceof Error ? error.message : error });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logStep("=== FATAL ERROR ===", { 
+      message: errorMessage,
+      stack: errorStack,
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+    });
     
     // Atualizar log de execução em caso de erro fatal
-    if (executionId) {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      );
-      
-      await supabase
-        .from('scheduled_executions')
-        .update({
-          status: 'failed',
-          errors_count: 1,
-          details: { 
-            error: error instanceof Error ? error.message : 'Unknown error',
-            fatalError: true
-          }
-        })
-        .eq('id', executionId);
+    if (executionId && supabase) {
+      try {
+        await supabase
+          .from('scheduled_executions')
+          .update({
+            status: 'failed',
+            errors_count: 1,
+            details: { 
+              error: errorMessage,
+              stack: errorStack,
+              fatalError: true,
+              timestamp: new Date().toISOString()
+            }
+          })
+          .eq('id', executionId);
+      } catch (updateError) {
+        logStep("Failed to update execution log", { 
+          updateError: updateError instanceof Error ? updateError.message : updateError 
+        });
+      }
+    } else if (executionId) {
+      // Tentar criar cliente novamente para atualizar o log
+      try {
+        const tempSupabase = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+        
+        await tempSupabase
+          .from('scheduled_executions')
+          .update({
+            status: 'failed',
+            errors_count: 1,
+            details: { 
+              error: errorMessage,
+              stack: errorStack,
+              fatalError: true,
+              timestamp: new Date().toISOString()
+            }
+          })
+          .eq('id', executionId);
+      } catch (retryError) {
+        logStep("Failed to update execution log on retry", { 
+          retryError: retryError instanceof Error ? retryError.message : retryError 
+        });
+      }
     }
 
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: errorMessage,
+        stack: errorStack
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
