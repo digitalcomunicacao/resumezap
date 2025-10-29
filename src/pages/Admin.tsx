@@ -17,6 +17,7 @@ import { LeadsManagement } from "@/components/analytics/LeadsManagement";
 import { AdminLogsTable } from "@/components/analytics/AdminLogsTable";
 import { UsersManagement } from "@/components/analytics/UsersManagement";
 import { ConnectionsHistory } from "@/components/analytics/ConnectionsHistory";
+import { MaintenancePanel } from "@/components/analytics/MaintenancePanel";
 
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
@@ -116,11 +117,12 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="overview">Visão Geral</TabsTrigger>
               <TabsTrigger value="usage">Uso</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="connections">Conexões</TabsTrigger>
+              <TabsTrigger value="maintenance">Manutenção</TabsTrigger>
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="logs">Logs</TabsTrigger>
             </TabsList>
@@ -192,6 +194,10 @@ const Admin = () => {
                   <ConnectionsHistory />
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="maintenance" className="mt-6">
+              <MaintenancePanel />
             </TabsContent>
 
             <TabsContent value="leads" className="mt-6">

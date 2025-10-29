@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.manual-send-summary]
 verify_jwt = true
+
+[functions.test-user-summary]
+verify_jwt = true
