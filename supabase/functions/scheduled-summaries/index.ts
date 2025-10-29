@@ -201,34 +201,64 @@ serve(async (req) => {
       logStep("Execution logged", { executionId });
     }
 
-    // Buscar usuários com conexão WhatsApp (qualquer status)
-    const { data: profiles, error: profilesError } = await supabase
+    // Buscar usuários com preferred_summary_time configurado
+    const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select(`
-        id, 
-        preferred_summary_time,
-        connection_mode,
-        whatsapp_connections!inner(
-          id,
-          instance_name,
-          status,
-          connection_type
-        )
-      `);
+      .select('id, preferred_summary_time, connection_mode, send_summary_to_group')
+      .not('preferred_summary_time', 'is', null);
 
     if (profilesError) {
       logStep("Error fetching profiles", { error: profilesError });
       throw profilesError;
     }
 
-    logStep("Profiles found", { count: profiles?.length || 0 });
+    if (!profilesData || profilesData.length === 0) {
+      logStep("No profiles with preferred_summary_time found");
+      
+      if (executionId) {
+        await supabase
+          .from('scheduled_executions')
+          .update({
+            status: 'completed',
+            details: { brasiliaHour, utcHour, message: 'No profiles configured' }
+          })
+          .eq('id', executionId);
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'No profiles with summary time configured',
+          processed: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Buscar conexões WhatsApp para esses usuários
+    const userIds = profilesData.map(p => p.id);
+    const { data: connections } = await supabase
+      .from('whatsapp_connections')
+      .select('user_id, id, instance_name, status, connection_type')
+      .in('user_id', userIds);
+
+    logStep("Connections found", { count: connections?.length || 0 });
+
+    // Combinar profiles com suas conexões
+    const profilesWithConnections = profilesData
+      .map(profile => ({
+        ...profile,
+        whatsapp_connection: connections?.find(c => c.user_id === profile.id)
+      }))
+      .filter(p => p.whatsapp_connection); // Apenas usuários com conexão
+
+    logStep("Profiles with connections", { count: profilesWithConnections.length });
 
     // Filtrar usuários cujo horário preferido é a hora atual (Brasília)
-    const usersToProcess = profiles?.filter(p => {
-      if (!p.preferred_summary_time) return false;
+    const usersToProcess = profilesWithConnections.filter(p => {
       const [hour] = p.preferred_summary_time.split(':');
       return parseInt(hour) === brasiliaHour;
-    }) || [];
+    });
 
     logStep("Users to process this hour", { count: usersToProcess.length, brasiliaHour });
 
