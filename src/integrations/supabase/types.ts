@@ -89,6 +89,42 @@ export type Database = {
         }
         Relationships: []
       }
+      connection_history: {
+        Row: {
+          created_at: string | null
+          disconnected_at: string | null
+          groups_count: number | null
+          id: string
+          instance_id: string | null
+          instance_name: string | null
+          reason: string | null
+          summaries_count: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          disconnected_at?: string | null
+          groups_count?: number | null
+          id?: string
+          instance_id?: string | null
+          instance_name?: string | null
+          reason?: string | null
+          summaries_count?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          disconnected_at?: string | null
+          groups_count?: number | null
+          id?: string
+          instance_id?: string | null
+          instance_name?: string | null
+          reason?: string | null
+          summaries_count?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       lead_qualification: {
         Row: {
           city: string
@@ -549,6 +585,8 @@ export type Database = {
       }
       whatsapp_groups: {
         Row: {
+          archived: boolean | null
+          archived_at: string | null
           created_at: string | null
           group_id: string
           group_image: string | null
@@ -561,6 +599,8 @@ export type Database = {
           whatsapp_connection_id: string
         }
         Insert: {
+          archived?: boolean | null
+          archived_at?: string | null
           created_at?: string | null
           group_id: string
           group_image?: string | null
@@ -573,6 +613,8 @@ export type Database = {
           whatsapp_connection_id: string
         }
         Update: {
+          archived?: boolean | null
+          archived_at?: string | null
           created_at?: string | null
           group_id?: string
           group_image?: string | null
@@ -599,6 +641,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_missing_groups: {
+        Args: { p_current_group_ids: string[]; p_user_id: string }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -129,6 +129,9 @@ Deno.serve(async (req) => {
       existingGroups?.map(g => [g.group_id, g.is_selected]) || []
     );
 
+    // Get current group IDs for archiving missing groups
+    const currentGroupIds = groups.map(group => group.id);
+
     // OPTIMIZED: Prepare all groups for batch upsert
     const groupsToUpsert = groups.map(group => ({
       user_id: user.id,
@@ -139,6 +142,9 @@ Deno.serve(async (req) => {
       participant_count: group.participants?.length || group.size || 0,
       // Preserve is_selected if group already exists, otherwise false
       is_selected: existingGroupsMap.get(group.id) ?? false,
+      // Ensure not archived when reconnecting
+      archived: false,
+      archived_at: null,
     }));
 
     // OPTIMIZED: Upsert all groups in ONE query (instead of N queries)
@@ -159,6 +165,20 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Upserted ${groupsToUpsert.length} groups in ${Date.now() - upsertStart}ms`);
+
+    // Archive groups that no longer exist in WhatsApp
+    console.log('Archiving missing groups...');
+    const { data: archivedCount, error: archiveError } = await supabaseClient
+      .rpc('archive_missing_groups', {
+        p_user_id: user.id,
+        p_current_group_ids: currentGroupIds,
+      });
+
+    if (archiveError) {
+      console.error('Error archiving missing groups:', archiveError);
+    } else {
+      console.log(`Archived ${archivedCount || 0} missing groups`);
+    }
 
     // Fetch all groups from database to return
     const { data: savedGroups, error: fetchError } = await supabaseClient

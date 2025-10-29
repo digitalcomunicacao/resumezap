@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 import GroupsListModal from "@/components/GroupsListModal";
 import { SummariesList } from "@/components/SummariesList";
+import { ConnectionHistoryBanner } from "@/components/ConnectionHistoryBanner";
 import { useSubscription, STRIPE_PLANS } from "@/contexts/SubscriptionContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -32,6 +33,8 @@ const Dashboard = () => {
   const [generatingSummaries, setGeneratingSummaries] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastExecution, setLastExecution] = useState<any>(null);
+  const [summariesCount, setSummariesCount] = useState(0);
+  const [groupsCount, setGroupsCount] = useState(0);
   const { subscriptionPlan, subscriptionEnd, groupsLimit, openCustomerPortal } = useSubscription();
 
   useEffect(() => {
@@ -65,6 +68,22 @@ const Dashboard = () => {
       } else {
         setProfile(data);
       }
+
+      // Fetch counts for history banner
+      const { count: summariesTotal } = await supabase
+        .from('summaries')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      const { count: groupsTotal } = await supabase
+        .from('whatsapp_groups')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('archived', false);
+
+      setSummariesCount(summariesTotal || 0);
+      setGroupsCount(groupsTotal || 0);
+      
       setLoadingProfile(false);
     };
 
@@ -271,6 +290,13 @@ const Dashboard = () => {
               Bem-vindo ao Resume Zap! Aqui você gerenciará seus resumos do WhatsApp.
             </p>
           </div>
+
+          {/* Banner de histórico preservado */}
+          <ConnectionHistoryBanner
+            summariesCount={summariesCount}
+            groupsCount={groupsCount}
+            whatsappConnected={profile?.whatsapp_connected || false}
+          />
 
           {/* Banner de alerta para TEMP_CONN_FAILED */}
           {lastExecution?.status === 'completed_with_errors' && 
