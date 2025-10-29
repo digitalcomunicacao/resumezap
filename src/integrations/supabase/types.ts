@@ -229,8 +229,6 @@ export type Database = {
           subscription_end_date: string | null
           subscription_plan: string | null
           subscription_status: string | null
-          summary_length: string | null
-          summary_tone: string | null
           total_summaries_generated: number | null
           updated_at: string | null
           whatsapp_connected: boolean | null
@@ -254,8 +252,6 @@ export type Database = {
           subscription_end_date?: string | null
           subscription_plan?: string | null
           subscription_status?: string | null
-          summary_length?: string | null
-          summary_tone?: string | null
           total_summaries_generated?: number | null
           updated_at?: string | null
           whatsapp_connected?: boolean | null
@@ -279,8 +275,6 @@ export type Database = {
           subscription_end_date?: string | null
           subscription_plan?: string | null
           subscription_status?: string | null
-          summary_length?: string | null
-          summary_tone?: string | null
           total_summaries_generated?: number | null
           updated_at?: string | null
           whatsapp_connected?: boolean | null

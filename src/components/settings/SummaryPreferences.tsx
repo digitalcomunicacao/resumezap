@@ -13,8 +13,6 @@ interface SummaryPreferencesProps {
 }
 
 export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
-  const [summaryTone, setSummaryTone] = useState("casual");
-  const [summaryLength, setSummaryLength] = useState("medio");
   const [preferredTime, setPreferredTime] = useState("09:00:00");
   const [sendToGroup, setSendToGroup] = useState(true);
   const [connectionMode, setConnectionMode] = useState("temporary");
@@ -25,7 +23,7 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
     const fetchPreferences = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('summary_tone, summary_length, preferred_summary_time, send_summary_to_group, connection_mode')
+        .select('preferred_summary_time, send_summary_to_group, connection_mode')
         .eq('id', userId)
         .single();
 
@@ -33,8 +31,6 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
         console.error('Error fetching preferences:', error);
         toast.error('Erro ao carregar preferências');
       } else if (data) {
-        setSummaryTone(data.summary_tone || 'casual');
-        setSummaryLength(data.summary_length || 'medio');
         setPreferredTime(data.preferred_summary_time || '09:00:00');
         setSendToGroup(data.send_summary_to_group ?? true);
         setConnectionMode(data.connection_mode || 'temporary');
@@ -50,8 +46,6 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
     const { error } = await supabase
       .from('profiles')
       .update({
-        summary_tone: summaryTone,
-        summary_length: summaryLength,
         preferred_summary_time: preferredTime,
         send_summary_to_group: sendToGroup,
         connection_mode: connectionMode,
@@ -79,48 +73,14 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
     <>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Preferências de Resumos
+          <Clock className="w-5 h-5" />
+          Agendamento de Resumos
         </CardTitle>
         <CardDescription>
-          Personalize como seus resumos são gerados
+          Configure quando e como receber seus resumos
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label>Tom do Resumo</Label>
-          <Select value={summaryTone} onValueChange={setSummaryTone}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="formal">Formal</SelectItem>
-              <SelectItem value="casual">Casual</SelectItem>
-              <SelectItem value="tecnico">Técnico</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Define o estilo de linguagem usado no resumo
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Tamanho do Resumo</Label>
-          <Select value={summaryLength} onValueChange={setSummaryLength}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="curto">Curto</SelectItem>
-              <SelectItem value="medio">Médio</SelectItem>
-              <SelectItem value="longo">Longo</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Controla o nível de detalhe do resumo
-          </p>
-        </div>
-
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <Clock className="w-4 h-4" />

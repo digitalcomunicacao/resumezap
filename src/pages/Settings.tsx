@@ -7,6 +7,8 @@ import { ArrowLeft, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
 import { AccountSettings } from "@/components/settings/AccountSettings";
+import { SummaryPreferences } from "@/components/settings/SummaryPreferences";
+import { SummaryCustomization } from "@/components/SummaryCustomization";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -45,22 +47,33 @@ const Settings = () => {
             </p>
           </div>
 
-          <Card className="shadow-soft">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="general">Geral</TabsTrigger>
-                <TabsTrigger value="account">Conta</TabsTrigger>
-              </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="general">Geral</TabsTrigger>
+              <TabsTrigger value="summaries">Resumos</TabsTrigger>
+              <TabsTrigger value="account">Conta</TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="general" className="space-y-4">
+            <TabsContent value="general" className="space-y-4">
+              <Card className="shadow-soft">
                 <GeneralSettings userId={user?.id || ''} />
-              </TabsContent>
+              </Card>
+            </TabsContent>
 
-              <TabsContent value="account" className="space-y-4">
+            <TabsContent value="summaries" className="space-y-4">
+              <Card className="shadow-soft">
+                <SummaryPreferences userId={user?.id || ''} />
+              </Card>
+              
+              <SummaryCustomization userId={user?.id || ''} />
+            </TabsContent>
+
+            <TabsContent value="account" className="space-y-4">
+              <Card className="shadow-soft">
                 <AccountSettings userId={user?.id || ''} />
-              </TabsContent>
-            </Tabs>
-          </Card>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>
