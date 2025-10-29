@@ -10,89 +10,26 @@ const logStep = (step: string, data?: any) => {
   console.log(`[SCHEDULED-SUMMARIES] ${step}`, data ? JSON.stringify(data) : '');
 };
 
-// Helper para garantir que a instância está conectada
+// Helper para garantir que a instância está conectada com retry
 async function ensureInstanceConnected(
   instanceName: string, 
   evolutionApiUrl: string, 
-  evolutionApiKey: string
-): Promise<boolean> {
-  try {
-    logStep("Checking connection state", { instanceName });
-    
-    // Verificar estado da conexão
-    const stateResponse = await fetch(
-      `${evolutionApiUrl}/instance/connectionState/${instanceName}`,
-      {
-        headers: {
-          'apikey': evolutionApiKey,
-        },
+  evolutionApiKey: string,
+  retryAttempts: number = 3
+): Promise<{ success: boolean; errorCode?: string }> {
+  const backoffDelays = [0, 15000, 45000]; // 0s, 15s, 45s
+  
+  for (let attempt = 0; attempt < retryAttempts; attempt++) {
+    try {
+      if (attempt > 0) {
+        logStep(`Retry attempt ${attempt}/${retryAttempts}`, { instanceName, delayMs: backoffDelays[attempt - 1] });
+        await new Promise(resolve => setTimeout(resolve, backoffDelays[attempt - 1]));
       }
-    );
-
-    const stateData = await stateResponse.json();
-    logStep("Connection state response", stateData);
-
-    // Se já está aberto, aplicar configurações de presença e retornar
-    if (stateData.state === 'open') {
-      logStep("Instance already connected, setting offline presence");
       
-      // Configurar para não aparecer online
-      await fetch(
-        `${evolutionApiUrl}/settings/set/${instanceName}`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': evolutionApiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            markOnlineOnConnect: false,
-            alwaysOnline: false,
-          }),
-        }
-      );
-
-      // Definir presença como indisponível
-      await fetch(
-        `${evolutionApiUrl}/chat/updatePresence/${instanceName}`,
-        {
-          method: 'POST',
-          headers: {
-            'apikey': evolutionApiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            presence: 'unavailable',
-          }),
-        }
-      );
-
-      return true;
-    }
-
-    // Se não está conectado, tentar conectar
-    logStep("Instance not connected, attempting to connect");
-    
-    const connectResponse = await fetch(
-      `${evolutionApiUrl}/instance/connect/${instanceName}`,
-      {
-        headers: {
-          'apikey': evolutionApiKey,
-        },
-      }
-    );
-
-    if (!connectResponse.ok) {
-      logStep("Failed to connect instance", { status: connectResponse.status });
-      return false;
-    }
-
-    // Aguardar até 30 segundos para conexão abrir
-    const maxAttempts = 10;
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      logStep("Checking connection state", { instanceName, attempt: attempt + 1 });
       
-      const recheckResponse = await fetch(
+      // Verificar estado da conexão
+      const stateResponse = await fetch(
         `${evolutionApiUrl}/instance/connectionState/${instanceName}`,
         {
           headers: {
@@ -101,12 +38,14 @@ async function ensureInstanceConnected(
         }
       );
 
-      const recheckData = await recheckResponse.json();
-      
-      if (recheckData.state === 'open') {
-        logStep("Instance connected successfully");
+      const stateData = await stateResponse.json();
+      logStep("Connection state response", stateData);
+
+      // Se já está aberto, aplicar configurações de presença e retornar
+      if (stateData.state === 'open') {
+        logStep("Instance already connected, setting offline presence");
         
-        // Aplicar configurações de presença
+        // Configurar para não aparecer online
         await fetch(
           `${evolutionApiUrl}/settings/set/${instanceName}`,
           {
@@ -122,6 +61,7 @@ async function ensureInstanceConnected(
           }
         );
 
+        // Definir presença como indisponível
         await fetch(
           `${evolutionApiUrl}/chat/updatePresence/${instanceName}`,
           {
@@ -136,16 +76,90 @@ async function ensureInstanceConnected(
           }
         );
 
-        return true;
+        return { success: true };
       }
-    }
 
-    logStep("Timeout waiting for connection");
-    return false;
-  } catch (error) {
-    logStep("Error in ensureInstanceConnected", { error: error instanceof Error ? error.message : error });
-    return false;
+      // Se não está conectado, tentar conectar
+      logStep("Instance not connected, attempting to connect");
+      
+      const connectResponse = await fetch(
+        `${evolutionApiUrl}/instance/connect/${instanceName}`,
+        {
+          headers: {
+            'apikey': evolutionApiKey,
+          },
+        }
+      );
+
+      if (!connectResponse.ok) {
+        logStep("Failed to connect instance", { status: connectResponse.status });
+        continue; // Tentar próximo retry
+      }
+
+      // Aguardar até 30 segundos para conexão abrir
+      const maxAttempts = 10;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        const recheckResponse = await fetch(
+          `${evolutionApiUrl}/instance/connectionState/${instanceName}`,
+          {
+            headers: {
+              'apikey': evolutionApiKey,
+            },
+          }
+        );
+
+        const recheckData = await recheckResponse.json();
+        
+        if (recheckData.state === 'open') {
+          logStep("Instance connected successfully");
+          
+          // Aplicar configurações de presença
+          await fetch(
+            `${evolutionApiUrl}/settings/set/${instanceName}`,
+            {
+              method: 'POST',
+              headers: {
+                'apikey': evolutionApiKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                markOnlineOnConnect: false,
+                alwaysOnline: false,
+              }),
+            }
+          );
+
+          await fetch(
+            `${evolutionApiUrl}/chat/updatePresence/${instanceName}`,
+            {
+              method: 'POST',
+              headers: {
+                'apikey': evolutionApiKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                presence: 'unavailable',
+              }),
+            }
+          );
+
+          return { success: true };
+        }
+      }
+
+      logStep("Timeout waiting for connection on attempt", { attempt: attempt + 1 });
+    } catch (error) {
+      logStep("Error in ensureInstanceConnected", { 
+        error: error instanceof Error ? error.message : error,
+        attempt: attempt + 1
+      });
+    }
   }
+  
+  // Todas as tentativas falharam
+  return { success: false, errorCode: 'TEMP_CONN_FAILED' };
 }
 
 serve(async (req) => {
@@ -330,18 +344,23 @@ serve(async (req) => {
       if (profile.connection_mode === 'temporary') {
         logStep("User in temporary mode, ensuring connection", { userId: profile.id });
         
-        const connected = await ensureInstanceConnected(
+        const connectionResult = await ensureInstanceConnected(
           connection.instance_name,
           evolutionApiUrl,
-          evolutionApiKey
+          evolutionApiKey,
+          3 // 3 tentativas com backoff
         );
 
-        if (!connected) {
-          logStep("Failed to establish temporary connection", { userId: profile.id });
+        if (!connectionResult.success) {
+          logStep("Failed to establish temporary connection after retries", { 
+            userId: profile.id,
+            errorCode: connectionResult.errorCode
+          });
           return {
             userId: profile.id,
             success: false,
-            error: 'Failed to establish temporary connection. User may need to reconnect via QR Code.'
+            error: 'Failed to establish temporary connection. User may need to reconnect via QR Code.',
+            errorCode: connectionResult.errorCode || 'TEMP_CONN_FAILED'
           };
         }
 
@@ -406,7 +425,8 @@ serve(async (req) => {
         return {
           userId: profile.id,
           success: false,
-          error: summaryData.error || 'Failed to generate summaries'
+          error: summaryData.error || 'Failed to generate summaries',
+          errorCode: 'SUMMARY_GENERATION_FAILED'
         };
       }
 

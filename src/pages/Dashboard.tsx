@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon, Shield } from "lucide-react";
+import { MessageSquare, Loader2, LogOut, CheckCircle2, Crown, CreditCard, Settings as SettingsIcon, Shield, AlertCircle, Clock, XCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useQualificationCheck } from "@/hooks/useQualificationCheck";
@@ -30,6 +31,7 @@ const Dashboard = () => {
   const [whatsappConnection, setWhatsappConnection] = useState<any>(null);
   const [generatingSummaries, setGeneratingSummaries] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [lastExecution, setLastExecution] = useState<any>(null);
   const { subscriptionPlan, subscriptionEnd, groupsLimit, openCustomerPortal } = useSubscription();
 
   useEffect(() => {
@@ -101,7 +103,25 @@ const Dashboard = () => {
     };
 
     fetchWhatsAppConnection();
+    fetchLastExecution();
   }, [user]);
+
+  const fetchLastExecution = async () => {
+    if (!user) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('scheduled_executions')
+      .select('*')
+      .gte('execution_time', `${today}T00:00:00`)
+      .order('execution_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      setLastExecution(data);
+    }
+  };
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -251,6 +271,60 @@ const Dashboard = () => {
               Bem-vindo ao Resume Zap! Aqui você gerenciará seus resumos do WhatsApp.
             </p>
           </div>
+
+          {/* Banner de alerta para TEMP_CONN_FAILED */}
+          {lastExecution?.status === 'completed_with_errors' && 
+           lastExecution?.details?.results?.some((r: any) => r.errorCode === 'TEMP_CONN_FAILED') && (
+            <Alert variant="destructive" className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium mb-1">Conexão WhatsApp Expirada</p>
+                  <p className="text-sm">
+                    Sua última execução automática falhou porque a conexão temporária do WhatsApp expirou. 
+                    Reescaneie o QR Code para reativar.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleWhatsAppConnect}
+                  className="shrink-0"
+                >
+                  Reescanear QR
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Indicador de status da conexão WhatsApp */}
+          {whatsappConnection && (
+            <Card className="border-primary/20">
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <span className="font-medium">WhatsApp Conectado</span>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-muted-foreground">
+                      {profile?.connection_mode === 'temporary' ? '🔔 Modo Temporário' : '🔗 Sempre Conectada'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate('/execution-history')}
+                      className="gap-2"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Ver Histórico
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="shadow-soft">
