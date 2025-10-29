@@ -16,6 +16,7 @@ import { ErrorLogsTable } from "@/components/analytics/ErrorLogsTable";
 import { LeadsManagement } from "@/components/analytics/LeadsManagement";
 import { AdminLogsTable } from "@/components/analytics/AdminLogsTable";
 import { UsersManagement } from "@/components/analytics/UsersManagement";
+import { ConnectionsHistory } from "@/components/analytics/ConnectionsHistory";
 
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
@@ -115,10 +116,11 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="overview">Visão Geral</TabsTrigger>
               <TabsTrigger value="usage">Uso</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
+              <TabsTrigger value="connections">Conexões</TabsTrigger>
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="logs">Logs</TabsTrigger>
             </TabsList>
@@ -174,6 +176,20 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <UsersManagement />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="connections" className="mt-6">
+              <Card className="shadow-soft">
+                <CardHeader>
+                  <CardTitle>Histórico de Conexões WhatsApp</CardTitle>
+                  <CardDescription>
+                    Monitore e diagnostique problemas de conexão dos usuários
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ConnectionsHistory />
                 </CardContent>
               </Card>
             </TabsContent>
