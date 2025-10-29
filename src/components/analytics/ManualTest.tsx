@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export function ManualTest() {
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [testMode, setTestMode] = useState<'all' | 'me'>('all');
 
   const handleManualExecution = async () => {
     setIsRunning(true);
@@ -15,7 +16,11 @@ export function ManualTest() {
 
     try {
       const { data, error } = await supabase.functions.invoke('scheduled-summaries', {
-        body: { manual: true, time: new Date().toISOString() }
+        body: { 
+          manual: true, 
+          time: new Date().toISOString(),
+          testMode: testMode 
+        }
       });
 
       if (error) throw error;
@@ -36,8 +41,28 @@ export function ManualTest() {
       <div>
         <h3 className="text-sm font-medium mb-2">Execução Manual do Cron</h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Força a execução imediata do sistema de geração de resumos para todos os usuários
+          Força a execução imediata do sistema de geração de resumos
         </p>
+        
+        <div className="flex gap-2 mb-3">
+          <Button
+            variant={testMode === 'all' ? 'default' : 'outline'}
+            onClick={() => setTestMode('all')}
+            size="sm"
+            className="flex-1"
+          >
+            Todos os usuários
+          </Button>
+          <Button
+            variant={testMode === 'me' ? 'default' : 'outline'}
+            onClick={() => setTestMode('me')}
+            size="sm"
+            className="flex-1"
+          >
+            Somente meu usuário
+          </Button>
+        </div>
+        
         <Button 
           onClick={handleManualExecution} 
           disabled={isRunning}
@@ -51,7 +76,7 @@ export function ManualTest() {
           ) : (
             <>
               <Play className="mr-2 h-4 w-4" />
-              Executar Agora
+              Executar Agora ({testMode === 'all' ? 'Todos' : 'Só Eu'})
             </>
           )}
         </Button>
@@ -72,8 +97,17 @@ export function ManualTest() {
                   {result.summariesGenerated !== undefined && (
                     <div><strong>Resumos gerados:</strong> {result.summariesGenerated}</div>
                   )}
+                  {result.totalSummaries !== undefined && (
+                    <div><strong>Total de resumos:</strong> {result.totalSummaries}</div>
+                  )}
+                  {result.skippedNoConnection !== undefined && result.skippedNoConnection > 0 && (
+                    <div className="text-orange-600"><strong>Sem conexão:</strong> {result.skippedNoConnection}</div>
+                  )}
                   {result.errors !== undefined && result.errors > 0 && (
                     <div className="text-yellow-600"><strong>Erros:</strong> {result.errors}</div>
+                  )}
+                  {result.errorCount !== undefined && result.errorCount > 0 && (
+                    <div className="text-yellow-600"><strong>Com erros:</strong> {result.errorCount}</div>
                   )}
                 </>
               )}

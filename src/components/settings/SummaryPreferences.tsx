@@ -101,9 +101,15 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
               })}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Horário de Brasília (GMT-3)
-          </p>
+          <div className="bg-primary/10 border border-primary/20 rounded-md p-3 space-y-1">
+            <p className="text-sm font-medium text-primary">
+              ⏰ Horário de Brasília (BRT / GMT-3)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              O resumo será gerado quando chegar <strong>{preferredTime.substring(0, 5)}</strong> no horário de Brasília.
+              Este é o horário que aparecerá no seu relógio no Brasil.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -127,12 +133,25 @@ export function SummaryPreferences({ userId }: SummaryPreferencesProps) {
               </SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground bg-primary/5 p-2 rounded-md">
-            {connectionMode === 'temporary' 
-              ? '✅ Suas notificações do WhatsApp funcionam normalmente. Conectamos apenas no horário do resumo.'
-              : '⚠️ Neste modo você pode receber menos notificações no celular, similar ao WhatsApp Web.'
-            }
-          </p>
+          <div className={`text-xs p-3 rounded-md ${connectionMode === 'temporary' ? 'bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800' : 'bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800'}`}>
+            {connectionMode === 'temporary' ? (
+              <>
+                <p className="font-medium text-green-700 dark:text-green-300 mb-1">✅ Modo Recomendado</p>
+                <p className="text-green-600 dark:text-green-400">
+                  Suas notificações do WhatsApp funcionam normalmente. 
+                  Conectamos automaticamente apenas no horário do resumo e depois desconectamos.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-orange-700 dark:text-orange-300 mb-1">⚠️ Atenção</p>
+                <p className="text-orange-600 dark:text-orange-400">
+                  Neste modo você pode receber menos notificações no celular, similar ao WhatsApp Web. 
+                  Se a conexão cair, você precisará reconectar manualmente via QR Code.
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="rounded-lg border p-4 space-y-3">

@@ -201,15 +201,15 @@ serve(async (req) => {
     supabase = createClient(supabaseUrl, supabaseServiceKey);
     logStep("Supabase client created successfully");
 
-    // Obter hora atual em Brasília (GMT-3)
+    // Obter hora atual em Brasília usando UTC com offset correto
     const now = new Date();
-    const utcHour = now.getUTCHours();
-    const brasiliaOffset = -3; // GMT-3
-    const brasiliaHour = (utcHour + brasiliaOffset + 24) % 24;
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const brasiliaHour = brasiliaTime.getHours();
     const currentTimeString = `${brasiliaHour.toString().padStart(2, '0')}:00:00`;
     
     logStep("Current hour check (Brasília time)", { 
-      utcHour, 
+      utcTime: now.toISOString(),
+      brasiliaTime: brasiliaTime.toISOString(),
       brasiliaHour, 
       currentTimeString 
     });
@@ -223,7 +223,12 @@ serve(async (req) => {
         users_processed: 0,
         summaries_generated: 0,
         errors_count: 0,
-        details: { brasiliaHour, utcHour, currentTimeString }
+        details: { 
+          brasiliaHour, 
+          brasiliaTime: brasiliaTime.toISOString(),
+          currentTimeString,
+          startedAt: now.toISOString()
+        }
       })
       .select()
       .single();
@@ -292,7 +297,19 @@ serve(async (req) => {
       return parseInt(hour) === brasiliaHour;
     });
 
-    logStep("Users to process this hour", { count: usersToProcess.length, brasiliaHour });
+    // Preparar informações sobre usuários elegíveis
+    const eligibleUsersInfo = usersToProcess.map((p: any) => ({
+      userId: p.id.substring(0, 8) + '...',
+      preferredTime: p.preferred_summary_time,
+      connectionMode: p.connection_mode,
+      sendToGroup: p.send_summary_to_group
+    }));
+
+    logStep("Users to process this hour", { 
+      count: usersToProcess.length, 
+      brasiliaHour,
+      eligibleUsers: eligibleUsersInfo
+    });
 
     if (usersToProcess.length === 0) {
       logStep("No users scheduled for this hour");
@@ -303,7 +320,14 @@ serve(async (req) => {
           .from('scheduled_executions')
           .update({
             status: 'completed',
-            details: { brasiliaHour, utcHour, message: 'No users scheduled' }
+            details: { 
+              brasiliaHour, 
+              brasiliaTime: brasiliaTime.toISOString(),
+              currentTimeString,
+              message: 'No users scheduled for this hour',
+              totalProfilesWithTime: profilesWithConnections.length,
+              totalProfiles: profilesData.length
+            }
           })
           .eq('id', executionId);
       }
@@ -313,7 +337,9 @@ serve(async (req) => {
           success: true, 
           message: `No users scheduled for ${currentTimeString} (Brasília)`,
           brasiliaHour,
-          utcHour,
+          brasiliaTime: brasiliaTime.toISOString(),
+          currentTimeString,
+          totalProfilesWithTime: profilesWithConnections.length,
           processed: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -356,11 +382,28 @@ serve(async (req) => {
             userId: profile.id,
             errorCode: connectionResult.errorCode
           });
+          
+          // Criar alerta para admin sobre falha de reconexão
+          await supabase
+            .from('admin_alerts')
+            .insert({
+              alert_type: 'reconnect_required',
+              severity: 'high',
+              message: `Usuário precisa reconectar via QR Code`,
+              details: {
+                userId: profile.id,
+                instanceName: connection.instance_name,
+                errorCode: connectionResult.errorCode,
+                timestamp: new Date().toISOString()
+              }
+            });
+          
           return {
             userId: profile.id,
             success: false,
-            error: 'Failed to establish temporary connection. User may need to reconnect via QR Code.',
-            errorCode: connectionResult.errorCode || 'TEMP_CONN_FAILED'
+            error: 'QR Code necessário - reconexão temporária falhou após 3 tentativas',
+            errorCode: connectionResult.errorCode || 'TEMP_CONN_FAILED',
+            requiresQR: true
           };
         }
 
@@ -372,14 +415,61 @@ serve(async (req) => {
             last_connected_at: new Date().toISOString()
           })
           .eq('id', connection.id);
+          
+        logStep("Temporary connection established and updated", { userId: profile.id });
       } else {
-        // Modo persistent - verificar se está conectado
-        if (connection.status !== 'connected') {
-          logStep("Persistent connection not active", { userId: profile.id });
+        // Modo persistent - apenas verificar estado, não tentar reconectar
+        logStep("User in persistent mode, checking connection status", { userId: profile.id });
+        
+        try {
+          const stateResponse = await fetch(
+            `${evolutionApiUrl}/instance/connectionState/${connection.instance_name}`,
+            {
+              headers: {
+                'apikey': evolutionApiKey,
+              },
+            }
+          );
+          
+          const stateData = await stateResponse.json();
+          
+          if (stateData.state !== 'open') {
+            logStep("Persistent connection offline", { userId: profile.id, state: stateData.state });
+            
+            // Criar alerta para admin
+            await supabase
+              .from('admin_alerts')
+              .insert({
+                alert_type: 'connection_offline',
+                severity: 'medium',
+                message: `Conexão persistente offline`,
+                details: {
+                  userId: profile.id,
+                  instanceName: connection.instance_name,
+                  connectionState: stateData.state,
+                  timestamp: new Date().toISOString()
+                }
+              });
+            
+            return {
+              userId: profile.id,
+              success: false,
+              error: 'WhatsApp desconectado (modo persistente - verifique sua conexão)',
+              errorCode: 'PERSISTENT_OFFLINE'
+            };
+          }
+          
+          logStep("Persistent connection verified as active", { userId: profile.id });
+        } catch (error) {
+          logStep("Error checking persistent connection", { 
+            userId: profile.id, 
+            error: error instanceof Error ? error.message : error 
+          });
           return {
             userId: profile.id,
             success: false,
-            error: 'WhatsApp not connected in persistent mode'
+            error: 'Erro ao verificar conexão persistente',
+            errorCode: 'PERSISTENT_CHECK_FAILED'
           };
         }
       }
@@ -577,11 +667,15 @@ serve(async (req) => {
           errors_count: errorCount,
           details: { 
             results: processedResults, 
-            brasiliaHour, 
-            utcHour, 
+            brasiliaHour,
+            brasiliaTime: brasiliaTime.toISOString(),
+            currentTimeString,
             successCount, 
             errorCount,
-            totalSummaries 
+            totalSummaries,
+            eligibleUsers: eligibleUsersInfo,
+            skippedNoConnection: processedResults.filter(r => r.errorCode === 'TEMP_CONN_FAILED' || r.errorCode === 'PERSISTENT_OFFLINE').length,
+            requiresQR: processedResults.filter(r => r.requiresQR).length
           }
         })
         .eq('id', executionId);
@@ -600,10 +694,12 @@ serve(async (req) => {
         success: true,
         message: `Processed ${usersToProcess.length} users for hour ${currentTimeString} (Brasília)`,
         brasiliaHour,
-        utcHour,
+        brasiliaTime: brasiliaTime.toISOString(),
+        currentTimeString,
         successCount,
         errorCount,
         totalSummaries,
+        skippedNoConnection: processedResults.filter(r => r.errorCode === 'TEMP_CONN_FAILED' || r.errorCode === 'PERSISTENT_OFFLINE').length,
         results: processedResults
       }),
       { 

@@ -28,12 +28,14 @@ export function CronStatus() {
 
   const getNextExecutionTime = () => {
     const now = new Date();
-    const nextHour = new Date(now);
-    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const nextHour = new Date(brasiliaTime);
+    nextHour.setHours(brasiliaTime.getHours() + 1, 0, 0, 0);
     return nextHour;
   };
 
   const nextExecution = getNextExecutionTime();
+  const scheduledUsers = lastExecution?.details?.eligibleUsers?.length || 0;
 
   return (
     <Card>
@@ -64,13 +66,18 @@ export function CronStatus() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1">
-            <div className="text-sm font-medium">Próxima Execução</div>
+            <div className="text-sm font-medium">Próxima Execução (Horário de Brasília)</div>
             <div className="text-lg font-semibold">
               {format(nextExecution, "dd/MM 'às' HH:mm", { locale: ptBR })}
             </div>
             <div className="text-xs text-muted-foreground">
               Em {Math.ceil((nextExecution.getTime() - Date.now()) / 60000)} minutos
             </div>
+            {scheduledUsers > 0 && (
+              <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                {scheduledUsers} usuário{scheduledUsers > 1 ? 's' : ''} agendado{scheduledUsers > 1 ? 's' : ''} para a próxima hora
+              </div>
+            )}
           </div>
 
           {lastExecution && (
