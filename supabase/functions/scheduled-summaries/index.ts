@@ -153,6 +153,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let executionId: string | null = null;
+
   try {
     logStep("Cron job started");
 
@@ -179,6 +181,25 @@ serve(async (req) => {
       brasiliaHour, 
       currentTimeString 
     });
+
+    // Registrar início da execução
+    const { data: executionLog, error: execLogError } = await supabase
+      .from('scheduled_executions')
+      .insert({
+        status: 'running',
+        execution_time: now.toISOString(),
+        users_processed: 0,
+        summaries_generated: 0,
+        errors_count: 0,
+        details: { brasiliaHour, utcHour, currentTimeString }
+      })
+      .select()
+      .single();
+
+    if (!execLogError && executionLog) {
+      executionId = executionLog.id;
+      logStep("Execution logged", { executionId });
+    }
 
     // Buscar usuários com conexão WhatsApp (qualquer status)
     const { data: profiles, error: profilesError } = await supabase
@@ -213,6 +234,18 @@ serve(async (req) => {
 
     if (usersToProcess.length === 0) {
       logStep("No users scheduled for this hour");
+      
+      // Atualizar log de execução
+      if (executionId) {
+        await supabase
+          .from('scheduled_executions')
+          .update({
+            status: 'completed',
+            details: { brasiliaHour, utcHour, message: 'No users scheduled' }
+          })
+          .eq('id', executionId);
+      }
+
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -225,204 +258,88 @@ serve(async (req) => {
       );
     }
 
-    let successCount = 0;
-    let errorCount = 0;
-    const results = [];
+    // Função para processar um usuário individual
+    const processUser = async (profile: any) => {
+      logStep("Processing user", { userId: profile.id });
 
-    // Processar cada usuário filtrado
-    for (const profile of usersToProcess) {
-      try {
-        logStep("Processing user", { userId: profile.id });
+      // Buscar conexão WhatsApp
+      const { data: connection, error: connectionError } = await supabase
+        .from('whatsapp_connections')
+        .select('*')
+        .eq('user_id', profile.id)
+        .maybeSingle();
 
-        // Buscar conexão WhatsApp
-        const { data: connection, error: connectionError } = await supabase
-          .from('whatsapp_connections')
-          .select('*')
-          .eq('user_id', profile.id)
-          .maybeSingle();
+      if (connectionError || !connection) {
+        logStep("No WhatsApp connection found", { userId: profile.id });
+        return {
+          userId: profile.id,
+          success: false,
+          error: 'No WhatsApp connection configured'
+        };
+      }
 
-        if (connectionError || !connection) {
-          logStep("No WhatsApp connection found", { userId: profile.id });
-          errorCount++;
-          results.push({
-            userId: profile.id,
-            success: false,
-            error: 'No WhatsApp connection configured'
-          });
-          continue;
-        }
-
-        // Se modo for 'temporary', garantir que está conectado
-        if (profile.connection_mode === 'temporary') {
-          logStep("User in temporary mode, ensuring connection", { userId: profile.id });
-          
-          const connected = await ensureInstanceConnected(
-            connection.instance_name,
-            evolutionApiUrl,
-            evolutionApiKey
-          );
-
-          if (!connected) {
-            logStep("Failed to establish temporary connection", { userId: profile.id });
-            errorCount++;
-            results.push({
-              userId: profile.id,
-              success: false,
-              error: 'Failed to establish temporary connection. User may need to reconnect via QR Code.'
-            });
-            continue;
-          }
-
-          // Atualizar registro de última conexão
-          await supabase
-            .from('whatsapp_connections')
-            .update({ 
-              status: 'connected',
-              last_connected_at: new Date().toISOString()
-            })
-            .eq('id', connection.id);
-        } else {
-          // Modo persistent - verificar se está conectado
-          if (connection.status !== 'connected') {
-            logStep("Persistent connection not active", { userId: profile.id });
-            errorCount++;
-            results.push({
-              userId: profile.id,
-              success: false,
-              error: 'WhatsApp not connected in persistent mode'
-            });
-            continue;
-          }
-        }
-
-        // Gerar resumos
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-summaries`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseServiceKey}`,
-              'x-user-id': profile.id
-            }
-          }
+      // Se modo for 'temporary', garantir que está conectado
+      if (profile.connection_mode === 'temporary') {
+        logStep("User in temporary mode, ensuring connection", { userId: profile.id });
+        
+        const connected = await ensureInstanceConnected(
+          connection.instance_name,
+          evolutionApiUrl,
+          evolutionApiKey
         );
 
-        const summaryData = await response.json();
-
-        if (!response.ok || summaryData.error) {
-          logStep("Error generating summaries", { 
-            userId: profile.id, 
-            error: summaryData.error || `HTTP ${response.status}` 
-          });
-          errorCount++;
-          results.push({
+        if (!connected) {
+          logStep("Failed to establish temporary connection", { userId: profile.id });
+          return {
             userId: profile.id,
             success: false,
-            error: summaryData.error || 'Failed to generate summaries'
-          });
-          
-          // Restaurar presença offline mesmo em caso de erro
-          if (profile.connection_mode === 'temporary') {
-            await fetch(
-              `${evolutionApiUrl}/chat/updatePresence/${connection.instance_name}`,
-              {
-                method: 'POST',
-                headers: {
-                  'apikey': evolutionApiKey,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  presence: 'unavailable',
-                }),
-              }
-            );
-          }
-          continue;
+            error: 'Failed to establish temporary connection. User may need to reconnect via QR Code.'
+          };
         }
 
-        logStep("Summaries generated successfully", { userId: profile.id, data: summaryData });
-        successCount++;
+        // Atualizar registro de última conexão
+        await supabase
+          .from('whatsapp_connections')
+          .update({ 
+            status: 'connected',
+            last_connected_at: new Date().toISOString()
+          })
+          .eq('id', connection.id);
+      } else {
+        // Modo persistent - verificar se está conectado
+        if (connection.status !== 'connected') {
+          logStep("Persistent connection not active", { userId: profile.id });
+          return {
+            userId: profile.id,
+            success: false,
+            error: 'WhatsApp not connected in persistent mode'
+          };
+        }
+      }
+
+      // Gerar resumos
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-summaries`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+            'x-user-id': profile.id
+          }
+        }
+      );
+
+      const summaryData = await response.json();
+
+      if (!response.ok || summaryData.error) {
+        logStep("Error generating summaries", { 
+          userId: profile.id, 
+          error: summaryData.error || `HTTP ${response.status}` 
+        });
         
-        // Verificar se deve enviar resumos para os grupos
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('send_summary_to_group')
-          .eq('id', profile.id)
-          .single();
-
-        if (userProfile?.send_summary_to_group) {
-          logStep("Sending summaries to groups", { userId: profile.id });
-          
-          const { data: summaries } = await supabase
-            .from('summaries')
-            .select('*')
-            .eq('user_id', profile.id)
-            .eq('summary_date', new Date().toISOString().split('T')[0])
-            .order('created_at', { ascending: false });
-
-          for (const summary of summaries || []) {
-            try {
-              const { data: existingDelivery } = await supabase
-                .from('summary_deliveries')
-                .select('id')
-                .eq('summary_id', summary.id)
-                .eq('group_id', summary.group_id)
-                .maybeSingle();
-
-              if (existingDelivery) {
-                logStep("Summary already sent, skipping", { 
-                  groupId: summary.group_id,
-                  summaryId: summary.id 
-                });
-                continue;
-              }
-
-              const sendResponse = await fetch(
-                `${supabaseUrl}/functions/v1/send-group-summary`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${supabaseServiceKey}`,
-                  },
-                  body: JSON.stringify({
-                    summaryId: summary.id,
-                    userId: summary.user_id,
-                    groupId: summary.group_id,
-                    groupName: summary.group_name,
-                    summaryText: summary.summary_text,
-                    instanceName: connection.instance_name,
-                  }),
-                }
-              );
-
-              const sendData = await sendResponse.json();
-              
-              if (!sendResponse.ok) {
-                logStep("Failed to send summary to group", { 
-                  groupId: summary.group_id, 
-                  error: sendData 
-                });
-              } else {
-                logStep("Summary sent to group", { 
-                  groupId: summary.group_id, 
-                  messageId: sendData.messageId 
-                });
-              }
-            } catch (sendError) {
-              logStep("Error sending summary to group", { 
-                groupId: summary.group_id, 
-                error: sendError 
-              });
-            }
-          }
-        }
-
-        // Se modo temporário, restaurar presença offline
+        // Restaurar presença offline mesmo em caso de erro
         if (profile.connection_mode === 'temporary') {
-          logStep("Restoring offline presence for temporary mode", { userId: profile.id });
-          
           await fetch(
             `${evolutionApiUrl}/chat/updatePresence/${connection.instance_name}`,
             {
@@ -437,29 +354,176 @@ serve(async (req) => {
             }
           );
         }
-
-        results.push({
-          userId: profile.id,
-          success: true,
-          summariesCount: summaryData?.summaries?.length || 0,
-          sentToGroups: userProfile?.send_summary_to_group || false,
-          connectionMode: profile.connection_mode
-        });
-      } catch (userError) {
-        logStep("Unexpected error processing user", { userId: profile.id, error: userError });
-        errorCount++;
-        results.push({
+        
+        return {
           userId: profile.id,
           success: false,
-          error: userError instanceof Error ? userError.message : 'Unknown error'
-        });
+          error: summaryData.error || 'Failed to generate summaries'
+        };
       }
+
+      logStep("Summaries generated successfully", { userId: profile.id, data: summaryData });
+      
+      // Verificar se deve enviar resumos para os grupos
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('send_summary_to_group')
+        .eq('id', profile.id)
+        .single();
+
+      if (userProfile?.send_summary_to_group) {
+        logStep("Sending summaries to groups", { userId: profile.id });
+        
+        const { data: summaries } = await supabase
+          .from('summaries')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('summary_date', new Date().toISOString().split('T')[0])
+          .order('created_at', { ascending: false });
+
+        for (const summary of summaries || []) {
+          try {
+            const { data: existingDelivery } = await supabase
+              .from('summary_deliveries')
+              .select('id')
+              .eq('summary_id', summary.id)
+              .eq('group_id', summary.group_id)
+              .maybeSingle();
+
+            if (existingDelivery) {
+              logStep("Summary already sent, skipping", { 
+                groupId: summary.group_id,
+                summaryId: summary.id 
+              });
+              continue;
+            }
+
+            const sendResponse = await fetch(
+              `${supabaseUrl}/functions/v1/send-group-summary`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({
+                  summaryId: summary.id,
+                  userId: summary.user_id,
+                  groupId: summary.group_id,
+                  groupName: summary.group_name,
+                  summaryText: summary.summary_text,
+                  instanceName: connection.instance_name,
+                }),
+              }
+            );
+
+            const sendData = await sendResponse.json();
+            
+            if (!sendResponse.ok) {
+              logStep("Failed to send summary to group", { 
+                groupId: summary.group_id, 
+                error: sendData 
+              });
+            } else {
+              logStep("Summary sent to group", { 
+                groupId: summary.group_id, 
+                messageId: sendData.messageId 
+              });
+            }
+          } catch (sendError) {
+            logStep("Error sending summary to group", { 
+              groupId: summary.group_id, 
+              error: sendError 
+            });
+          }
+        }
+      }
+
+      // Se modo temporário, restaurar presença offline
+      if (profile.connection_mode === 'temporary') {
+        logStep("Restoring offline presence for temporary mode", { userId: profile.id });
+        
+        await fetch(
+          `${evolutionApiUrl}/chat/updatePresence/${connection.instance_name}`,
+          {
+            method: 'POST',
+            headers: {
+              'apikey': evolutionApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              presence: 'unavailable',
+            }),
+          }
+        );
+      }
+
+      return {
+        userId: profile.id,
+        success: true,
+        summariesCount: summaryData?.summaries?.length || 0,
+        sentToGroups: userProfile?.send_summary_to_group || false,
+        connectionMode: profile.connection_mode
+      };
+    };
+
+    // Processar todos os usuários em paralelo
+    logStep("Starting parallel processing", { userCount: usersToProcess.length });
+    
+    const results = await Promise.allSettled(
+      usersToProcess.map(profile => processUser(profile))
+    );
+
+    // Contar sucessos e erros
+    const successCount = results.filter(r => 
+      r.status === 'fulfilled' && r.value.success
+    ).length;
+    
+    const errorCount = results.filter(r => 
+      r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)
+    ).length;
+
+    const totalSummaries = results
+      .filter(r => r.status === 'fulfilled')
+      .reduce((sum, r) => sum + (r.value.summariesCount || 0), 0);
+
+    const processedResults = results.map(r => {
+      if (r.status === 'fulfilled') {
+        return r.value;
+      } else {
+        return {
+          success: false,
+          error: r.reason instanceof Error ? r.reason.message : 'Unknown error'
+        };
+      }
+    });
+
+    // Atualizar log de execução com resultados finais
+    if (executionId) {
+      await supabase
+        .from('scheduled_executions')
+        .update({
+          status: errorCount > 0 ? 'completed_with_errors' : 'completed',
+          users_processed: usersToProcess.length,
+          summaries_generated: totalSummaries,
+          errors_count: errorCount,
+          details: { 
+            results: processedResults, 
+            brasiliaHour, 
+            utcHour, 
+            successCount, 
+            errorCount,
+            totalSummaries 
+          }
+        })
+        .eq('id', executionId);
     }
 
     logStep("Cron job completed", { 
       total: usersToProcess.length, 
       success: successCount, 
       errors: errorCount,
+      summaries: totalSummaries,
       brasiliaHour 
     });
 
@@ -471,7 +535,8 @@ serve(async (req) => {
         utcHour,
         successCount,
         errorCount,
-        results
+        totalSummaries,
+        results: processedResults
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -481,6 +546,27 @@ serve(async (req) => {
 
   } catch (error) {
     logStep("Fatal error", { error: error instanceof Error ? error.message : error });
+    
+    // Atualizar log de execução em caso de erro fatal
+    if (executionId) {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      
+      await supabase
+        .from('scheduled_executions')
+        .update({
+          status: 'failed',
+          errors_count: 1,
+          details: { 
+            error: error instanceof Error ? error.message : 'Unknown error',
+            fatalError: true
+          }
+        })
+        .eq('id', executionId);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: false, 
