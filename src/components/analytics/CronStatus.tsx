@@ -35,7 +35,9 @@ export function CronStatus() {
   };
 
   const nextExecution = getNextExecutionTime();
-  const scheduledUsers = lastExecution?.details?.eligibleUsers?.length || 0;
+  const scheduledUsers = (lastExecution?.details && typeof lastExecution.details === 'object' && 'eligibleUsers' in lastExecution.details && Array.isArray(lastExecution.details.eligibleUsers)) 
+    ? lastExecution.details.eligibleUsers.length 
+    : 0;
 
   return (
     <Card>

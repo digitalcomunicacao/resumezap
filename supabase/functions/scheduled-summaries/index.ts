@@ -257,7 +257,12 @@ serve(async (req) => {
           .from('scheduled_executions')
           .update({
             status: 'completed',
-            details: { brasiliaHour, utcHour, message: 'No profiles configured' }
+            details: { 
+              brasiliaHour, 
+              brasiliaTime: brasiliaTime.toISOString(),
+              currentTimeString,
+              message: 'No profiles configured' 
+            }
           })
           .eq('id', executionId);
       }
