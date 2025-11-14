@@ -19,14 +19,15 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user
+    // Get authenticated user
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser(token);
 
-    if (!user) {
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -34,23 +35,43 @@ serve(async (req) => {
     }
 
     const { instanceId } = await req.json();
+
     if (!instanceId) {
-      return new Response(JSON.stringify({ error: "InstanceId required" }), {
+      return new Response(JSON.stringify({ error: "Instance ID é obrigatório" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Call Evolution API
+    console.log("Checking status for instance:", instanceId);
+
+    // Check connection state in Evolution API
+    // Check connection state in Evolution API
     const statusResponse = await fetch(`${evolutionApiUrl}/instance/connectionState/${instanceId}`, {
       method: "GET",
-      headers: { apikey: evolutionApiKey },
+      headers: {
+        apikey: evolutionApiKey,
+      },
     });
 
+    if (!statusResponse.ok) {
+      const errorText = await statusResponse.text();
+      console.error("Evolution API status error:", errorText);
+      return new Response(JSON.stringify({ error: "Erro ao verificar status" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const statusData = await statusResponse.json();
+    console.log("Status received:", statusData);
+    console.log("====== EVOLUTION RAW RESPONSE ======");
+    console.log(JSON.stringify(statusData, null, 2));
+    console.log("====== PARSED STATE ======");
+    console.log("state:", state);
+    console.log("=====================================");
 
-    console.log("EVOLUTION RAW:", JSON.stringify(statusData, null, 2));
-
+    // Normalize all possible status formats
     const state =
       statusData?.state ||
       statusData?.connectionState ||
@@ -59,23 +80,39 @@ serve(async (req) => {
       statusData?.response?.state ||
       statusData?.response?.connectionState;
 
-    console.log("STATE PARSED:", state);
+    console.log("Parsed state:", state);
 
+    // Final truth of connection
     const isConnected = state === "connected" || state === "open";
 
+    // Normalize phone number
     const phoneNumber = statusData?.instance?.owner || statusData?.owner || statusData?.response?.owner || null;
 
-    // UPSERT
-    const record = {
-      user_id: user.id,
-      instance_id: instanceId,
+    // Build DB update
+    const updateData: any = {
       status: isConnected ? "connected" : "connecting",
-      phone_number: phoneNumber,
       updated_at: new Date().toISOString(),
-      ...(isConnected && { connected_at: new Date().toISOString() }),
     };
 
-    await supabase.from("whatsapp_connections").upsert(record, { onConflict: "user_id" });
+    if (isConnected) {
+      updateData.connected_at = new Date().toISOString();
+      if (phoneNumber) updateData.phone_number = phoneNumber;
+    }
+
+    // Save state inside DB
+    await supabase.from("whatsapp_connections").update(updateData).eq("instance_id", instanceId).eq("user_id", user.id);
+
+    // Update profile
+    if (isConnected) {
+      await supabase
+        .from("profiles")
+        .update({
+          whatsapp_connected: true,
+          whatsapp_instance_id: instanceId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+    }
 
     return new Response(
       JSON.stringify({
@@ -85,8 +122,10 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (error) {
+    console.error("Error in check-whatsapp-status:", error);
+    const errorMessage = error instanceof Error ? error.message : "Erro interno do servidor";
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
