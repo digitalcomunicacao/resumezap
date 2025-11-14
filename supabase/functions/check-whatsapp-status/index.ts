@@ -78,7 +78,7 @@ serve(async (req) => {
     console.log("Parsed state:", state);
 
     // Final truth of connection
-    const isConnected = state === "connected";
+    const isConnected = state === "connected" || state === "open";
 
     // Normalize phone number
     const phoneNumber = statusData?.instance?.owner || statusData?.owner || statusData?.response?.owner || null;
