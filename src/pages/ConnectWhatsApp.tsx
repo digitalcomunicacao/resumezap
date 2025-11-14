@@ -127,6 +127,9 @@ const ConnectWhatsApp = () => {
         setTimeout(() => {
           navigate("/dashboard");
         }, 1500);
+        console.log("[FRONT] Resultado checkStatus():", data);
+        console.log("[FRONT] Estado atual:", data?.status);
+        console.log("[FRONT] instanceId:", instanceId);
 
         return true;
       }
