@@ -65,6 +65,11 @@ serve(async (req) => {
 
     const statusData = await statusResponse.json();
     console.log("Status received:", statusData);
+    console.log("====== EVOLUTION RAW RESPONSE ======");
+    console.log(JSON.stringify(statusData, null, 2));
+    console.log("====== PARSED STATE ======");
+    console.log("state:", state);
+    console.log("=====================================");
 
     // Normalize all possible status formats
     const state =
